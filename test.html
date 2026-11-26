@@ -1,0 +1,207 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>ことばの系譜 - 開発テスト</title>
+
+  <link rel="stylesheet" href="style.css?v=20261126-4">
+
+  <style>
+    .test-label {
+      display: inline-block;
+      margin-top: 12px;
+      padding: 5px 12px;
+      border-radius: 4px;
+      background: #fff0d5;
+      color: #95601a;
+      font-size: 12px;
+    }
+
+    .test-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .test-controls label {
+      font-size: 12px;
+      color: #777;
+    }
+
+    .test-controls select,
+    .test-controls button {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #e2ded8;
+      border-radius: 5px;
+      background: white;
+      color: #333;
+      cursor: pointer;
+    }
+
+    .test-controls button.primary {
+      background: #b93636;
+      border-color: #b93636;
+      color: white;
+    }
+
+    .test-results {
+      margin-top: 20px;
+      padding: 12px;
+      background: #faf9f6;
+      border: 1px solid #e2ded8;
+      border-radius: 5px;
+      font-size: 12px;
+      line-height: 2;
+    }
+
+    .test-results p {
+      margin: 5px 0;
+    }
+
+    .test-results strong {
+      font-size: 16px;
+    }
+
+    .result-good {
+      color: #27834c;
+    }
+
+    .result-bad {
+      color: #b93636;
+    }
+
+    @media (max-width: 700px) {
+      .test-controls {
+        gap: 8px;
+      }
+
+      .test-results {
+        margin-top: 10px;
+      }
+    }
+  </style>
+
+  <script src="test.js?v=1" defer></script>
+</head>
+
+<body>
+
+  <header>
+    <div class="logo">1</div>
+    <h1>ことばの系譜</h1>
+    <p>乗っ取られて、嬉しい。</p>
+    <div class="test-label">開発テスト専用ページ</div>
+  </header>
+
+  <main class="workspace">
+
+    <aside class="sidebar">
+
+      <h2>テスト設定</h2>
+
+      <div class="test-controls">
+
+        <label for="work-count">作品数</label>
+
+        <select id="work-count">
+          <option value="10">10作品</option>
+          <option value="50">50作品</option>
+          <option value="100" selected>100作品</option>
+          <option value="300">300作品</option>
+          <option value="500">500作品</option>
+          <option value="1000">1000作品</option>
+        </select>
+
+        <label for="tree-pattern">枝分かれのパターン</label>
+
+        <select id="tree-pattern">
+          <option value="random">ランダム</option>
+          <option value="star">一つの作品に集中</option>
+          <option value="chain">一本道</option>
+          <option value="balanced">均等な枝分かれ</option>
+          <option value="cluster">一部の枝に集中</option>
+        </select>
+
+        <label for="layout-type">配置方法</label>
+
+        <select id="layout-type">
+          <option value="original">現在の配置方法</option>
+          <option value="improved">重なり防止版</option>
+        </select>
+
+        <button id="generate" class="primary">
+          テストデータを生成
+        </button>
+
+        <button id="toggle-overlap">
+          重なり箇所の強調切替
+        </button>
+
+      </div>
+
+      <div class="test-results">
+
+        <p>
+          作品数：
+          <strong id="result-count">--</strong>
+        </p>
+
+        <p>
+          重なっているカード：
+          <strong id="result-overlap">--</strong>
+        </p>
+
+        <p>
+          重なりの組数：
+          <strong id="result-pairs">--</strong>
+        </p>
+
+        <p>
+          最大世代：
+          <strong id="result-depth">--</strong>
+        </p>
+
+        <p>
+          配置計算時間：
+          <strong id="result-time">--</strong>
+        </p>
+
+        <p>
+          描画処理時間：
+          <strong id="result-render-time">--</strong>
+        </p>
+
+      </div>
+
+    </aside>
+
+    <section class="viewer">
+
+      <div class="toolbar">
+
+        <button id="zoom-in">＋</button>
+        <button id="zoom-out">－</button>
+        <button id="reset">全体表示</button>
+
+      </div>
+
+      <svg id="tree"></svg>
+
+      <p id="status"></p>
+
+    </section>
+
+  </main>
+
+  <footer>
+    このページは開発用のシミュレーションです。<br>
+    表示される作品・作者はすべて架空のデータです。<br>
+    <a href="index.html">本番サイトに戻る</a>
+  </footer>
+
+</body>
+</html>
