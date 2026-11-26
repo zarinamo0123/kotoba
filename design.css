@@ -1,0 +1,47 @@
+/* ことばをたどる — デザイン試作。style.css の後に読み込む。 */
+:root {
+  --background: #f8f5ed;
+  --white: #fffdf8;
+  --text: #51483b;
+  --muted: #796c5b;
+  --accent: #a45c45;
+  --border: #ddd5c6;
+  --selected: #f2e4d9;
+  --hover: #eee8dc;
+  --serif: "Noto Serif JP", "Yu Mincho", "Hiragino Mincho ProN", serif;
+}
+body { font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif; }
+header { padding: 28px 20px 24px; }
+h1 { font-family: var(--serif); font-size: 30px; font-weight: 500; letter-spacing: .12em; }
+header p { letter-spacing: .08em; }
+.logo { background: var(--accent); }
+.workspace { border-radius: 10px; background: var(--white); }
+.sidebar { background: var(--white); }
+.sidebar h2 { letter-spacing: .08em; }
+.author-button:hover, .toolbar button:hover { background: var(--hover); }
+.author-button.active, .all-works-button.active { background: var(--selected); color: var(--accent); }
+.toolbar { background: var(--white); }
+.toolbar button, .toolbar select, #mode, #focus-work, #author-search { background: var(--white) !important; border-color: var(--border) !important; color: var(--text) !important; }
+.toolbar button:hover { background: var(--hover) !important; }
+#mode-description { color: var(--muted) !important; }
+#tree { background: var(--background); }
+#tree rect[fill="#ffffff"], #tree rect[fill="white"] { fill: var(--white); }
+#tree rect[stroke="#c9c4bd"] { stroke: var(--border); }
+#tree line[stroke="#bcb7b0"] { stroke: #b9ad96; }
+#tree [stroke="#b93636"] { stroke: var(--accent); }
+#tree [fill="#b93636"] { fill: var(--accent); }
+#tree text[fill="#333333"] { fill: var(--text); }
+#tree text[fill="#777777"], #tree text[fill="#777"] { fill: var(--muted); }
+#tree text[font-size="13"][font-weight="600"] { font-family: var(--serif); }
+#tree a:hover text { fill: var(--accent); }
+#authors > div[style*="rgb(248, 234, 234)"] { background: var(--selected) !important; }
+#authors button[style*="rgb(185, 54, 54)"] { color: var(--accent) !important; }
+button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible, #tree [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+footer { letter-spacing: .035em; }
+@media (max-width: 700px) {
+  header { padding: 16px 12px 18px; }
+  h1 { font-size: 24px; }
+  .workspace { border-radius: 8px; }
+  .sidebar-toggle, .all-works-button { background: var(--white); }
+  .all-works-button.active { background: var(--selected); }
+}
