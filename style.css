@@ -100,6 +100,10 @@ header p {
   color: var(--accent);
 }
 
+.sidebar-toggle {
+  display: none;
+}
+
 .viewer {
   position: relative;
   display: flex;
@@ -150,6 +154,7 @@ select {
   cursor: grab;
   touch-action: none;
   user-select: none;
+  -webkit-user-select: none;
 }
 
 #tree:active {
@@ -195,11 +200,23 @@ footer a:hover {
 
 @media (max-width: 700px) {
   header {
-    padding: 22px 12px;
+    padding: 16px 12px 18px;
+  }
+
+  .logo {
+    width: 32px;
+    height: 32px;
+    font-size: 21px;
+    line-height: 32px;
   }
 
   h1 {
-    font-size: 24px;
+    margin: 12px 0 6px;
+    font-size: 23px;
+  }
+
+  header p {
+    font-size: 12px;
   }
 
   .workspace {
@@ -207,28 +224,99 @@ footer a:hover {
     flex-direction: column;
     height: auto;
     min-height: 0;
-    margin: 0 10px;
+    margin: 0 8px;
   }
 
   .sidebar {
     padding: 12px;
     border-right: 0;
     border-bottom: 1px solid var(--border);
+    overflow: visible;
+  }
+
+  .sidebar h2 {
+    margin: 0 0 10px;
+  }
+
+  #author-search {
+    font-size: 16px !important;
   }
 
   #authors {
-    flex-direction: row;
-    overflow-x: auto;
+    flex-direction: column;
+    max-height: 220px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    gap: 3px;
   }
 
   .author-button {
-    width: auto;
+    width: 100%;
     flex-shrink: 0;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    min-height: 40px;
+  }
+
+  .sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--white);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .sidebar:has(.sidebar-toggle) h2 {
+    display: none;
+  }
+
+  .sidebar:has(.sidebar-toggle) #author-search {
+    margin-top: 12px;
+  }
+
+  .sidebar.is-collapsed #authors,
+  .sidebar.is-collapsed #author-search {
+    display: none;
+  }
+
+  .toolbar {
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .toolbar button,
+  .toolbar select {
+    min-height: 44px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .toolbar select {
+    flex: 1;
+    min-width: 0;
+    margin-right: 0;
   }
 
   .viewer {
-    height: 65vh;
-    min-height: 380px;
+    height: 62vh;
+    height: 62dvh;
+    min-height: 340px;
+  }
+
+  #tree {
+    cursor: default;
+  }
+
+  footer {
+    padding: 18px 12px;
+    font-size: 11px;
   }
 }
