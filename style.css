@@ -100,7 +100,15 @@ header p {
   color: var(--accent);
 }
 
+.sidebar-controls {
+  display: none;
+}
+
 .sidebar-toggle {
+  display: none;
+}
+
+.all-works-button {
   display: none;
 }
 
@@ -238,6 +246,60 @@ footer a:hover {
     margin: 0 0 10px;
   }
 
+  .sidebar-controls {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--white);
+    color: var(--text);
+    text-align: left;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .all-works-button {
+    display: block;
+    flex-shrink: 0;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--white);
+    color: var(--text);
+    font-size: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .all-works-button.active {
+    border-color: var(--accent);
+    background: #f8eaea;
+    color: var(--accent);
+  }
+
+  .sidebar:has(.sidebar-toggle) h2 {
+    display: none;
+  }
+
+  .sidebar:has(.sidebar-toggle) #author-search {
+    margin-top: 12px;
+  }
+
   #author-search {
     font-size: 16px !important;
   }
@@ -259,27 +321,8 @@ footer a:hover {
     min-height: 40px;
   }
 
-  .sidebar-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    min-height: 44px;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    background: var(--white);
-    color: var(--text);
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .sidebar:has(.sidebar-toggle) h2 {
+  .all-works-list-button {
     display: none;
-  }
-
-  .sidebar:has(.sidebar-toggle) #author-search {
-    margin-top: 12px;
   }
 
   .sidebar.is-collapsed #authors,
