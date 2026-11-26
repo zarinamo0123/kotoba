@@ -423,6 +423,7 @@ function revealSelection() {
 }
 
 function refreshSelection() {
+  updateModeDescription();
   revealSelection();
   render();
   requestAnimationFrame(fitTree);
@@ -452,9 +453,9 @@ function addBranchButton(node, w, active) {
 
 function createFocusControls() {
   const modeSelect = document.getElementById("mode");
-  const option = document.createElement("option");
-  option.value = "direct"; option.textContent = "ことばのバトン";
-  modeSelect.insertBefore(option, modeSelect.querySelector('option[value="journey"]'));
+  const labels = {mine:"この人の作品",direct:"乗っ取られた先",journey:"乗っ取られた先の先",roots:"乗っ取ってきた道"};
+  modeSelect.replaceChildren(...Object.entries(labels).map(([value,label]) => new Option(label,value)));
+  modeSelect.value = mode;
   const panel = document.createElement("div");
   panel.id = "focus-controls";
   Object.assign(panel.style,{display:"none",flexWrap:"wrap",gap:"8px",alignItems:"center",padding:"8px 12px",borderBottom:"1px solid #e2ded8",fontSize:"13px"});
@@ -467,7 +468,10 @@ function createFocusControls() {
   check.type = "checkbox"; check.id = "related-only";
   check.onchange = () => { relatedOnly = check.checked; refreshSelection(); };
   label.append(check, " 関係する作品だけを表示");
-  panel.append(select,label);
+  const workLabel = document.createElement("label");
+  workLabel.htmlFor = "focus-work";
+  workLabel.textContent = "たどりたい作品";
+  panel.append(workLabel,select,label);
   document.querySelector(".toolbar").after(panel);
 }
 
@@ -477,9 +481,30 @@ function syncFocusControls() {
   panel.style.display = selectedAuthor ? "flex" : "none";
   document.getElementById("mode").disabled = !selectedAuthor;
   document.getElementById("related-only").checked = relatedOnly;
-  select.replaceChildren(new Option("すべての自分の作品", ""));
+  select.replaceChildren(new Option(selectedAuthor + "のすべての作品", ""));
   works.filter(w => w.author === selectedAuthor).forEach(w => select.add(new Option(w.title,w.id)));
   select.value = selectedWork;
+  updateModeDescription();
+}
+
+function updateModeDescription() {
+  const description = document.getElementById("mode-description");
+  if (!description) return;
+  if (!selectedAuthor) {
+    description.textContent = mobile.matches
+      ? "「参加者を選ぶ・探す」から、気になる作者を選んでください。"
+      : "参加者一覧から、気になる作者を選んでください。";
+    return;
+  }
+  const work = workMap.get(selectedWork);
+  const subject = work ? `「${work.title}」` : `${selectedAuthor}の作品`;
+  const descriptions = {
+    mine: `${subject}を見る。`,
+    direct: `${subject}と、直接乗っ取ってくれた作品を見る。`,
+    journey: `${subject}から広がった、すべての作品をたどる。`,
+    roots: `${subject}の乗っ取り元を、はじまりまでさかのぼる。`
+  };
+  description.textContent = descriptions[mode] || descriptions.mine;
 }
 
 function render() {
@@ -806,6 +831,7 @@ function createSidebarToggle() {
 
   mobile.addEventListener("change", () => {
     setSidebarCollapsed(mobile.matches);
+    updateModeDescription();
     requestAnimationFrame(fitTree);
   });
 }
