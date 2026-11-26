@@ -894,8 +894,6 @@ function buildAuthorGraph() {
   const names = [...new Set(works.map(w => w.author))].sort((a,b)=>a.localeCompare(b,"ja",{numeric:true}));
   const byId = new Map(works.map(w=>[w.id,w]));
   authorPoints = new Map(); authorEdges = new Map();
-  const radius = names.length <= 1 ? 0 : Math.max(140, 170/(2*Math.sin(Math.PI/names.length)));
-  names.forEach((name,i)=>{const angle=2*Math.PI*i/names.length-Math.PI/2;authorPoints.set(name,{x:radius*Math.cos(angle),y:radius*Math.sin(angle)});});
   works.forEach(w=>{
     const parent=byId.get(w.parent);
     if(w.verified!==true || !parent || parent.verified!==true || parent.author===w.author)return;
@@ -903,13 +901,63 @@ function buildAuthorGraph() {
     if(!authorEdges.has(key))authorEdges.set(key,{a:pair[0],b:pair[1],links:[]});
     authorEdges.get(key).links.push({parent,child:w});
   });
+  layoutAuthors(names);
+}
+function layoutAuthors(names) {
+  const n=names.length;
+  if(!n)return;
+  const random=seededRandom(20261126);
+  const radius=Math.sqrt(n)*95;
+  const nodes=names.map((name,i)=>{
+    const angle=i*2.399963229728653;
+    const r=radius*Math.sqrt((i+0.5)/n);
+    return {name,x:r*Math.cos(angle)+random(),y:r*Math.sin(angle)*0.75+random(),dx:0,dy:0};
+  });
+  const map=new Map(nodes.map(p=>[p.name,p]));
+  const edges=[...authorEdges.values()].map(e=>[map.get(e.a),map.get(e.b)]);
+  for(let t=0;t<220;t++){
+    const cap=24*(1-t/220)+1;
+    for(const p of nodes){p.dx=-p.x*0.012;p.dy=-p.y*0.012;}
+    for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){
+      const a=nodes[i],b=nodes[j],x=b.x-a.x,y=b.y-a.y,d=Math.max(1,Math.hypot(x,y));
+      const f=18000/(d*d);
+      a.dx-=x/d*f;b.dx+=x/d*f;a.dy-=y/d*f;b.dy+=y/d*f;
+    }
+    for(const [a,b] of edges){
+      const x=b.x-a.x,y=b.y-a.y,d=Math.max(1,Math.hypot(x,y)),f=(d-185)*0.055;
+      a.dx+=x/d*f;b.dx-=x/d*f;a.dy+=y/d*f;b.dy-=y/d*f;
+    }
+    for(const p of nodes){const d=Math.max(1,Math.hypot(p.dx,p.dy)),k=Math.min(1,cap/d);p.x+=p.dx*k;p.y+=p.dy*k;}
+    for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){
+      const a=nodes[i],b=nodes[j],x=b.x-a.x,y=b.y-a.y,ox=170-Math.abs(x),oy=94-Math.abs(y);
+      if(ox>0&&oy>0){if(ox<oy){const k=(ox+0.1)/2*(x>=0?1:-1);a.x-=k;b.x+=k;}else{const k=(oy+0.1)/2*(y>=0?1:-1);a.y-=k;b.y+=k;}}
+    }
+  }
+  // Final deterministic collision guard, including name labels.
+  const placed=[];
+  for(const p of nodes){
+    const free=(x,y)=>placed.every(q=>Math.abs(q.x-x)>=170||Math.abs(q.y-y)>=94);
+    if(!free(p.x,p.y)){
+      const x=p.x,y=p.y;
+      search: for(let ring=1;;ring++)for(let k=0;k<ring*16;k++){
+        const angle=k*2*Math.PI/(ring*16),xx=x+ring*12*Math.cos(angle),yy=y+ring*12*Math.sin(angle);
+        if(free(xx,yy)){p.x=xx;p.y=yy;break search;}
+      }
+    }
+    placed.push(p);authorPoints.set(p.name,{x:p.x,y:p.y});
+  }
+
 }
 function authorDetails(edge) {
   const panel=document.getElementById("author-details");
   panel.replaceChildren(); panel.hidden=!edge;
   if(!edge)return;
-  const heading=document.createElement("strong");heading.textContent=edge.a+" と "+edge.b;panel.append(heading);
-  edge.links.forEach(({parent,child})=>{const p=document.createElement("p");p.textContent=parent.author+"「"+parent.title+"」 → "+child.author+"「"+child.title+"」";panel.append(p);});
+  const close=document.createElement("button");close.textContent="閉じる ×";close.style.cssText="float:right;cursor:pointer;background:white;border:1px solid #ddd;border-radius:4px;padding:5px";close.onclick=()=>{chosenEdge="";authorDetails(null);renderAuthorsGraph();};panel.append(close);
+  const heading=document.createElement("strong");heading.textContent="二人をつないだ作品";panel.append(heading);
+  edge.links.forEach(({parent,child})=>{
+    const p=document.createElement("div");p.style.cssText="clear:both;border-top:1px solid #e2ded8;margin-top:8px;padding-top:8px";
+    for(const text of ["乗っ取り元："+parent.author+"「"+parent.title+"」","↓ ことばを乗っ取り","乗っ取った作品："+child.author+"「"+child.title+"」"]){const line=document.createElement("div");line.textContent=text;p.append(line);}panel.append(p);
+  });
 }
 function activateGraph(el,fn){el.setAttribute("role","button");el.setAttribute("tabindex","0");el.style.cursor="pointer";el.addEventListener("click",e=>{e.stopPropagation();fn();});el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();fn();}});}
 function renderAuthorsGraph(){
@@ -923,7 +971,7 @@ function renderAuthorsGraph(){
     const attrs={x1:a.x,y1:a.y,x2:b.x,y2:b.y};
     const g=svgElement("g",{"aria-label":e.a+" と "+e.b+" のつながり"});
     g.append(svgElement("line",{...attrs,stroke:key===chosenEdge?"#b93636":"#a49e96","stroke-width":1.5,opacity:active?1:0.12}));
-    if(active){g.append(svgElement("line",{...attrs,stroke:"transparent","stroke-width":14}));activateGraph(g,()=>{chosenEdge=key;authorDetails(e);renderAuthorsGraph();});}
+    if(active){g.append(svgElement("line",{...attrs,stroke:"transparent","stroke-width":14,"vector-effect":"non-scaling-stroke"}));activateGraph(g,()=>{chosenEdge=key;authorDetails(e);renderAuthorsGraph();});}
     group.append(g);
   });
   authorPoints.forEach((p,name)=>{
@@ -943,7 +991,7 @@ function fitAuthorsGraph(){
 }
 function createAuthorViewControls(){
   const toolbar=document.querySelector(".toolbar");const select=document.createElement("select");select.setAttribute("aria-label","つながりの表示方法");select.add(new Option("作品のつながり","works"));select.add(new Option("作者のつながり","authors"));Object.assign(select.style,{padding:"8px",maxWidth:"100%",border:"1px solid #e2ded8",borderRadius:"5px",background:"white",color:"#333"});toolbar.prepend(select);
-  const panel=document.createElement("div");panel.id="author-details";panel.hidden=true;Object.assign(panel.style,{padding:"8px 12px",maxHeight:"120px",overflow:"auto",fontSize:"13px",background:"#faf9f6",overflowWrap:"anywhere"});toolbar.after(panel);
+  const panel=document.createElement("div");panel.id="author-details";panel.hidden=true;Object.assign(panel.style,{padding:"8px 12px",maxHeight:"120px",overflow:"auto",fontSize:"13px",background:"#faf9f6",overflowWrap:"anywhere"});const viewer=document.querySelector(".viewer");viewer.style.position="relative";Object.assign(panel.style,{position:"absolute",top:"70px",right:"10px",width:"min(360px, calc(100% - 20px))",boxSizing:"border-box",maxHeight:"min(240px, 40vh)",zIndex:"5",border:"1px solid #e2ded8",borderRadius:"8px",boxShadow:"0 3px 12px #0002"});viewer.append(panel);
   select.onchange=()=>{authorView=select.value==="authors";chosenAuthor="";chosenEdge="";authorDetails(null);runTest();};
 }
 
