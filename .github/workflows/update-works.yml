@@ -1,0 +1,138 @@
+
+name: Update works
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover-works:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install libraries
+        run: pip install requests beautifulsoup4
+
+      - name: Discover works
+        run: |
+          python <<'PY'
+          import json
+          import re
+          import time
+          import requests
+          from bs4 import BeautifulSoup
+          from urllib.parse import quote, urljoin
+
+          with open("works.json", encoding="utf-8") as f:
+              works = json.load(f)
+
+          pattern = re.compile(
+              r'https://note\.com/([^/\s"<>]+)/n/(n[0-9a-f]+)'
+          )
+
+          registered = set()
+
+          for work in works:
+              match = pattern.search(work.get("url", ""))
+              if match:
+                  registered.add(match.group(2))
+
+          sources = {
+              "ハッシュタグ": (
+                  "https://note.com/hashtag/"
+                  + quote("ことば乗っ取りゲーム")
+                  + "?f=new"
+              ),
+              "専用マガジン": (
+                  "https://note.com/zarinamo/m/m546e739befa5"
+              )
+          }
+
+          session = requests.Session()
+          session.headers.update({
+              "User-Agent": "KotobaGenealogy/1.0",
+              "Accept-Language": "ja,en;q=0.9"
+          })
+
+          discovered = {}
+
+          for name, url in sources.items():
+              print("=" * 50)
+              print(f"取得元: {name}")
+
+              try:
+                  response = session.get(url, timeout=30)
+                  print(f"HTTP: {response.status_code}")
+                  response.raise_for_status()
+
+                  soup = BeautifulSoup(
+                      response.text, "html.parser"
+                  )
+
+                  found = {}
+
+                  for link in soup.find_all("a", href=True):
+                      href = urljoin(url, link["href"])
+                      match = pattern.search(href)
+
+                      if match:
+                          author, article_id = match.groups()
+                          found[article_id] = (
+                              f"https://note.com/{author}/n/{article_id}"
+                          )
+
+                  source = response.text.replace("\\/", "/")
+                  source = source.replace("\\u002F", "/")
+
+                  for match in pattern.finditer(source):
+                      author, article_id = match.groups()
+                      found[article_id] = (
+                          f"https://note.com/{author}/n/{article_id}"
+                      )
+
+                  print(f"検出URL数: {len(found)}")
+
+                  for article_id, article_url in found.items():
+                      discovered[article_id] = article_url
+
+                      status = (
+                          "登録済み"
+                          if article_id in registered
+                          else "新着候補"
+                      )
+
+                      print(f"{status}: {article_url}")
+
+              except requests.RequestException as e:
+                  print(f"取得失敗: {e}")
+
+              time.sleep(2)
+
+          new_works = {
+              key: value
+              for key, value in discovered.items()
+              if key not in registered
+          }
+
+          print("=" * 50)
+          print("検出結果")
+          print(f"登録済み作品数: {len(registered)}")
+          print(f"検出作品数: {len(discovered)}")
+          print(f"新着候補数: {len(new_works)}")
+
+          for url in new_works.values():
+              print(f"新着候補: {url}")
+
+          print("検証完了")
+          print("works.json は変更していません")
+          PY
