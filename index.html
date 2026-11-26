@@ -13,21 +13,41 @@
   <script src="script.js?v=20261126-10" defer></script>
 
   <style>
+    .toolbar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .view-area,
     .mode-area {
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      min-width: 190px;
-      margin-right: auto;
+      gap: 5px;
+      min-width: 0;
     }
 
-    #mode {
+    .mode-area {
+      margin-right: 0;
+    }
+
+    .control-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      letter-spacing: .04em;
+    }
+
+    #mode,
+    #view-mode {
       width: 100%;
       padding: 8px 12px;
-      border: 1px solid #e2ded8;
+      border: 1px solid var(--border);
       border-radius: 5px;
-      background: white;
-      color: #333;
+      background: var(--white);
+      color: var(--text);
       font: inherit;
       font-size: 14px;
       cursor: pointer;
@@ -35,21 +55,55 @@
 
     #mode-description {
       margin: 0;
-      padding: 0 3px;
-      color: #666;
+      padding: 0 2px;
+      color: var(--muted);
       font-size: 12px;
       line-height: 1.5;
+      max-width: 360px;
+      overflow-wrap: anywhere;
+    }
+
+    .zoom-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+      padding-top: 20px;
+    }
+
+    .zoom-controls button {
+      white-space: nowrap;
     }
 
     @media (max-width: 700px) {
+      .toolbar {
+        gap: 8px;
+      }
+
+      .view-area,
       .mode-area {
-        width: 100%;
+        flex: 1 1 140px;
         min-width: 0;
-        margin-right: 0;
+      }
+
+      .control-label {
+        font-size: 11px;
+      }
+
+      #mode,
+      #view-mode {
+        font-size: 13px;
+        padding: 8px;
       }
 
       #mode-description {
-        font-size: 12px;
+        font-size: 11px;
+      }
+
+      .zoom-controls {
+        padding-top: 0;
+        margin-left: auto;
+        gap: 6px;
       }
     }
   </style>
@@ -65,7 +119,7 @@
   <main class="workspace">
 
     <aside class="sidebar">
-      <h2>参加者一覧</h2>
+      <h2>誰をたどる？</h2>
       <div id="authors"></div>
     </aside>
 
@@ -75,8 +129,12 @@
 
         <div class="mode-area">
 
+          <label class="control-label" for="mode">
+            どこをたどる？
+          </label>
+
           <select id="mode"
-                  aria-label="表示方法"
+                  aria-label="どこをたどる？"
                   aria-describedby="mode-description">
 
             <option value="mine">
@@ -98,14 +156,18 @@
           </select>
 
           <p id="mode-description" aria-live="polite">
-            参加者一覧から、気になる作者を選んでください。
+            気になる作者を選んでください。
           </p>
 
         </div>
 
-        <button id="zoom-in" aria-label="拡大">＋</button>
-        <button id="zoom-out" aria-label="縮小">－</button>
-        <button id="reset">全体表示</button>
+        <div class="zoom-controls">
+
+          <button id="zoom-in" aria-label="拡大">＋</button>
+          <button id="zoom-out" aria-label="縮小">－</button>
+          <button id="reset">全体表示</button>
+
+        </div>
 
       </div>
 
@@ -142,7 +204,7 @@
 
     <p>
       作品タイトルをクリックすると記事へ移動します。<br>
-      作者名をクリックするとプロフィールへ移動します。
+      参加者一覧のアイコンからプロフィールへ移動できます。
     </p>
 
   </footer>
