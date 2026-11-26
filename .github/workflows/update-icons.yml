@@ -1,0 +1,142 @@
+
+name: Update profile icons
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 22 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-profile-icons
+  cancel-in-progress: false
+
+jobs:
+  update-icons:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install libraries
+        run: pip install requests beautifulsoup4
+
+      - name: Update profile icons
+        run: |
+          python <<'PY'
+          import json
+          import time
+          import requests
+          from bs4 import BeautifulSoup
+          from urllib.parse import urlparse
+
+          path = "works.json"
+
+          with open(path, encoding="utf-8") as f:
+              works = json.load(f)
+
+          cache = {}
+
+          for work in works:
+              profile = work.get("profile", "")
+              icon = work.get("icon", "")
+              if profile and icon:
+                  cache[profile] = icon
+
+          session = requests.Session()
+          session.headers.update({
+              "User-Agent": "KotobaGenealogy/1.0"
+          })
+
+          def get_icon(profile):
+              parsed = urlparse(profile)
+              if parsed.scheme != "https":
+                  return ""
+              if parsed.hostname != "note.com":
+                  return ""
+
+              try:
+                  response = session.get(
+                      profile, timeout=20
+                  )
+                  response.raise_for_status()
+
+                  soup = BeautifulSoup(
+                      response.text, "html.parser"
+                  )
+
+                  for tag in soup.find_all("meta"):
+                      key = tag.get("property") or tag.get("name")
+                      if key not in ("og:image", "twitter:image"):
+                          continue
+
+                      url = tag.get("content", "")
+                      parsed_url = urlparse(url)
+
+                      if (
+                          parsed_url.scheme == "https"
+                          and parsed_url.hostname == "assets.st-note.com"
+                          and "/profile_" in parsed_url.path
+                      ):
+                          return url
+
+              except requests.RequestException as e:
+                  print(f"取得失敗: {profile}: {e}")
+
+              return ""
+
+          changed = False
+
+          for work in works:
+              if work.get("icon"):
+                  continue
+
+              profile = work.get("profile", "")
+              if not profile:
+                  continue
+
+              if profile not in cache:
+                  cache[profile] = get_icon(profile)
+                  time.sleep(2)
+
+              icon = cache[profile]
+
+              if icon:
+                  work["icon"] = icon
+                  changed = True
+                  print(f"取得成功: {work['author']}")
+              else:
+                  print(f"未取得: {work['author']}")
+
+          if changed:
+              with open(path, "w", encoding="utf-8") as f:
+                  json.dump(
+                      works, f,
+                      ensure_ascii=False,
+                      indent=2
+                  )
+                  f.write("\n")
+
+          print("処理完了")
+          PY
+
+      - name: Save changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if ! git diff --quiet -- works.json; then
+            git add works.json
+            git commit -m "Update profile icons"
+            git push
+          else
+            echo "No changes"
+          fi
