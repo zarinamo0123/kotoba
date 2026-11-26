@@ -546,6 +546,7 @@ function branchControl(id) {
 }
 
 function render(measure = false) {
+  if (authorView) { renderAuthorsGraph(); return; }
   const start = performance.now();
 
   const svg = document.getElementById("tree");
@@ -672,6 +673,7 @@ function updateTransform() {
 }
 
 function fitTree() {
+  if (authorView) { fitAuthorsGraph(); return; }
   const svg = document.getElementById("tree");
 
   if (!positions.size) return;
@@ -755,6 +757,16 @@ function runTest() {
     dataKey = key;
   }
 
+  if (authorView) {
+    chosenAuthor=""; chosenEdge=""; authorDetails(null); buildAuthorGraph();
+    document.querySelector(".test-results").hidden=true;
+    document.getElementById("layout-type").disabled=true;
+    document.getElementById("toggle-overlap").disabled=true;
+    renderAuthorsGraph(); fitAuthorsGraph(); return;
+  }
+  document.querySelector(".test-results").hidden=false;
+  document.getElementById("layout-type").disabled=false;
+  document.getElementById("toggle-overlap").disabled=false;
   collapsed.clear();
   branchMap = new Map();
   works.forEach(w => {
@@ -862,8 +874,9 @@ function init() {
     () => changeZoom(1 / 1.2);
 
   document.getElementById("reset").onclick =
-    fitTree;
+    () => { if(authorView){chosenAuthor="";chosenEdge="";authorDetails(null);renderAuthorsGraph();} fitTree(); };
 
+  createAuthorViewControls();
   setupGestures(svg);
 
   window.addEventListener("resize", fitTree);
@@ -871,4 +884,67 @@ function init() {
   runTest();
 }
 
-document.addEventListener("DOMContentLoaded", init);
+
+let authorView = false;
+let chosenAuthor = "";
+let chosenEdge = "";
+let authorPoints = new Map();
+let authorEdges = new Map();
+function buildAuthorGraph() {
+  const names = [...new Set(works.map(w => w.author))].sort((a,b)=>a.localeCompare(b,"ja",{numeric:true}));
+  const byId = new Map(works.map(w=>[w.id,w]));
+  authorPoints = new Map(); authorEdges = new Map();
+  const radius = names.length <= 1 ? 0 : Math.max(140, 170/(2*Math.sin(Math.PI/names.length)));
+  names.forEach((name,i)=>{const angle=2*Math.PI*i/names.length-Math.PI/2;authorPoints.set(name,{x:radius*Math.cos(angle),y:radius*Math.sin(angle)});});
+  works.forEach(w=>{
+    const parent=byId.get(w.parent);
+    if(w.verified!==true || !parent || parent.verified!==true || parent.author===w.author)return;
+    const pair=[parent.author,w.author].sort(); const key=JSON.stringify(pair);
+    if(!authorEdges.has(key))authorEdges.set(key,{a:pair[0],b:pair[1],links:[]});
+    authorEdges.get(key).links.push({parent,child:w});
+  });
+}
+function authorDetails(edge) {
+  const panel=document.getElementById("author-details");
+  panel.replaceChildren(); panel.hidden=!edge;
+  if(!edge)return;
+  const heading=document.createElement("strong");heading.textContent=edge.a+" と "+edge.b;panel.append(heading);
+  edge.links.forEach(({parent,child})=>{const p=document.createElement("p");p.textContent=parent.author+"「"+parent.title+"」 → "+child.author+"「"+child.title+"」";panel.append(p);});
+}
+function activateGraph(el,fn){el.setAttribute("role","button");el.setAttribute("tabindex","0");el.style.cursor="pointer";el.addEventListener("click",e=>{e.stopPropagation();fn();});el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();fn();}});}
+function renderAuthorsGraph(){
+  const svg=document.getElementById("tree");svg.replaceChildren();
+  const group=svgElement("g",{id:"tree-content",transform:`translate(${offsetX} ${offsetY}) scale(${zoom})`});svg.append(group);
+  const neighbors=new Set(chosenAuthor?[chosenAuthor]:[]);
+  authorEdges.forEach(e=>{if(e.a===chosenAuthor)neighbors.add(e.b);if(e.b===chosenAuthor)neighbors.add(e.a);});
+  const entries=[...authorEdges.entries()].sort(([,a],[,b])=>Number(a.a===chosenAuthor||a.b===chosenAuthor)-Number(b.a===chosenAuthor||b.b===chosenAuthor));
+  entries.forEach(([key,e])=>{
+    const a=authorPoints.get(e.a),b=authorPoints.get(e.b),active=!chosenAuthor||e.a===chosenAuthor||e.b===chosenAuthor;
+    const attrs={x1:a.x,y1:a.y,x2:b.x,y2:b.y};
+    const g=svgElement("g",{"aria-label":e.a+" と "+e.b+" のつながり"});
+    g.append(svgElement("line",{...attrs,stroke:key===chosenEdge?"#b93636":"#a49e96","stroke-width":1.5,opacity:active?1:0.12}));
+    if(active){g.append(svgElement("line",{...attrs,stroke:"transparent","stroke-width":14}));activateGraph(g,()=>{chosenEdge=key;authorDetails(e);renderAuthorsGraph();});}
+    group.append(g);
+  });
+  authorPoints.forEach((p,name)=>{
+    const g=svgElement("g",{transform:`translate(${p.x} ${p.y})`,opacity:!chosenAuthor||neighbors.has(name)?1:0.22,"aria-label":name,"aria-pressed":String(name===chosenAuthor)});
+    g.append(svgElement("circle",{r:25,fill:"#e9e4dc",stroke:name===chosenAuthor?"#b93636":"#bcb7b0","stroke-width":2}));
+    const initial=svgElement("text",{y:5,"text-anchor":"middle","font-size":15,fill:"#555"});initial.textContent=name.replace("テスト作者", "").trim()||"作";g.append(initial);
+    g.append(svgElement("rect",{x:-78,y:30,width:156,height:24,rx:4,fill:"white"}));
+    const label=svgElement("text",{y:46,"text-anchor":"middle","font-size":12,fill:"#333"});label.textContent=name;g.append(label);
+    activateGraph(g,()=>{chosenAuthor=chosenAuthor===name?"":name;chosenEdge="";authorDetails(null);renderAuthorsGraph();});group.append(g);
+  });
+  document.getElementById("status").textContent=chosenAuthor?chosenAuthor+" と直接つながった作者を表示中。線を押すと作品が分かります。":"作者を押すとつながりが強調されます。線を押すと作品が分かります。";
+}
+function fitAuthorsGraph(){
+  const svg=document.getElementById("tree"),p=[...authorPoints.values()];if(!p.length||!svg.clientWidth||!svg.clientHeight)return;
+  const minX=Math.min(...p.map(a=>a.x))-90,maxX=Math.max(...p.map(a=>a.x))+90,minY=Math.min(...p.map(a=>a.y))-45,maxY=Math.max(...p.map(a=>a.y))+75;
+  zoom=Math.min(1,svg.clientWidth/(maxX-minX),svg.clientHeight/(maxY-minY));offsetX=svg.clientWidth/2-(minX+maxX)/2*zoom;offsetY=svg.clientHeight/2-(minY+maxY)/2*zoom;updateTransform();
+}
+function createAuthorViewControls(){
+  const toolbar=document.querySelector(".toolbar");const select=document.createElement("select");select.setAttribute("aria-label","つながりの表示方法");select.add(new Option("作品のつながり","works"));select.add(new Option("作者のつながり","authors"));Object.assign(select.style,{padding:"8px",maxWidth:"100%",border:"1px solid #e2ded8",borderRadius:"5px",background:"white",color:"#333"});toolbar.prepend(select);
+  const panel=document.createElement("div");panel.id="author-details";panel.hidden=true;Object.assign(panel.style,{padding:"8px 12px",maxHeight:"120px",overflow:"auto",fontSize:"13px",background:"#faf9f6",overflowWrap:"anywhere"});toolbar.after(panel);
+  select.onchange=()=>{authorView=select.value==="authors";chosenAuthor="";chosenEdge="";authorDetails(null);runTest();};
+}
+
+ document.addEventListener("DOMContentLoaded", init);
