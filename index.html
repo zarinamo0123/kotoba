@@ -8,6 +8,48 @@
   <title>ことばの系譜</title>
   <link rel="stylesheet" href="style.css?v=20261126-4">
   <script src="script.js?v=20261126-6" defer></script>
+
+  <style>
+    .mode-area {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      min-width: 190px;
+      margin-right: auto;
+    }
+
+    #mode {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #e2ded8;
+      border-radius: 5px;
+      background: white;
+      color: #333;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    #mode-description {
+      margin: 0;
+      padding: 0 3px;
+      color: #888;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 700px) {
+      .mode-area {
+        width: 100%;
+        min-width: 0;
+        margin-right: 0;
+      }
+
+      #mode-description {
+        font-size: 11px;
+      }
+    }
+  </style>
 </head>
 
 <body>
@@ -29,11 +71,18 @@
 
       <div class="toolbar">
 
-        <select id="mode" aria-label="表示方法">
-          <option value="mine">自分の作品</option>
-          <option value="journey">ことばの行方</option>
-          <option value="roots">ルーツをたどる</option>
-        </select>
+        <div class="mode-area">
+          <select id="mode" aria-label="表示方法">
+            <option value="mine">この人の作品</option>
+            <option value="direct">ことばのバトン</option>
+            <option value="journey">ことばの行方</option>
+            <option value="roots">ルーツ</option>
+          </select>
+
+          <p id="mode-description">
+            選んだ人が投稿した作品を見る
+          </p>
+        </div>
 
         <button id="zoom-in" aria-label="拡大">＋</button>
         <button id="zoom-out" aria-label="縮小">－</button>
