@@ -4,50 +4,80 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="ことば乗っ取りゲームから生まれた作品のつながりをたどるサイトです。">
   <title>ことばの系譜</title>
-  <style>
-    body {
-      margin: 0;
-      background: #faf9f6;
-      color: #333;
-      font-family: sans-serif;
-      text-align: center;
-    }
-    header {
-      padding: 60px 20px 30px;
-    }
-    h1 {
-      font-size: 32px;
-      letter-spacing: 0.15em;
-    }
-    .logo {
-      background: #b93636;
-      color: white;
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      line-height: 40px;
-      font-size: 26px;
-      margin: auto;
-    }
-    a {
-      color: #b93636;
-    }
-  </style>
+  <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
 </head>
+
 <body>
+
   <header>
     <div class="logo">1</div>
     <h1>ことばの系譜</h1>
     <p>乗っ取られて、嬉しい。</p>
   </header>
-  <main>
-    <p>ことばの旅は、まだ始まったばかり。</p>
+
+  <main class="workspace">
+
+    <aside class="sidebar">
+      <h2>参加者一覧</h2>
+      <div id="authors"></div>
+    </aside>
+
+    <section class="viewer">
+
+      <div class="toolbar">
+
+        <select id="mode" aria-label="表示方法">
+          <option value="mine">自分の作品</option>
+          <option value="journey">ことばの行方</option>
+          <option value="roots">ルーツをたどる</option>
+        </select>
+
+        <button id="zoom-in" aria-label="拡大">＋</button>
+        <button id="zoom-out" aria-label="縮小">－</button>
+        <button id="reset">全体表示</button>
+
+      </div>
+
+      <svg id="tree"
+           xmlns="http://www.w3.org/2000/svg"
+           aria-label="ことばの系譜図">
+      </svg>
+
+      <p id="status"></p>
+
+    </section>
+
+  </main>
+
+  <footer>
+
     <p>
-      <a href="https://note.com/zarinamo/m/m546e739befa5">
-        参加作品を読む
+      ことばは、誰かの文章から、また誰かの文章へ。
+    </p>
+
+    <p>
+      <a href="https://note.com/zarinamo/n/n8840122ca349"
+         target="_blank"
+         rel="noopener noreferrer">
+        遊び方
+      </a>
+      ｜
+      <a href="https://note.com/zarinamo/m/m546e739befa5"
+         target="_blank"
+         rel="noopener noreferrer">
+        参加作品マガジン
       </a>
     </p>
-  </main>
+
+    <p>
+      作品タイトルをクリックすると記事へ移動します。<br>
+      作者名をクリックするとプロフィールへ移動します。
+    </p>
+
+  </footer>
+
 </body>
 </html>
