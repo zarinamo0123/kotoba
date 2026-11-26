@@ -590,26 +590,21 @@ function render() {
       fill: "#333333"
     });
 
+    // 文字数を均等に分け、最後の一文字だけの改行を防ぐ。
     const chars = Array.from(w.title);
-
-    for (
-      let i = 0;
-      i < chars.length && i < 39;
-      i += 13
-    ) {
+    const shown = chars.length > 39 ? [...chars.slice(0, 38), "…"] : chars;
+    const count = Math.max(1, Math.ceil(shown.length / 13));
+    const fontSize = count === 3 ? 14 : 16;
+    const lineHeight = count === 3 ? 15 : 18;
+    title.setAttribute("font-size", fontSize);
+    for (let i = 0; i < count; i++) {
+      const start = Math.floor(i * shown.length / count);
+      const end = Math.floor((i + 1) * shown.length / count);
       const line = svgElement("tspan", {
         x: 0,
-        y: -23 + (i / 13) * 16
+        y: -8 + (i - (count - 1) / 2) * lineHeight
       });
-
-      line.textContent =
-        chars.slice(i, i + 13).join("");
-
-      if (i === 26 && chars.length > 39) {
-        line.textContent =
-          chars.slice(i, i + 12).join("") + "…";
-      }
-
+      line.textContent = shown.slice(start, end).join("");
       title.appendChild(line);
     }
 
@@ -632,48 +627,41 @@ function render() {
       node.appendChild(title);
     }
 
-    const author = svgElement("text", {
-      x: -70,
-      y: 32,
-      "text-anchor": "start",
-      "font-size": 13,
-      fill: "#777777"
-    });
-
-    author.textContent = Array.from(w.author).length > 13 ? Array.from(w.author).slice(0, 12).join("") + "…" : w.author;
-    const authorTip = svgElement("title");
-    authorTip.textContent = w.author;
-    author.appendChild(authorTip);
-
     const authorGroup = svgElement("g");
-
-    const iconX = -88;
-
-    const fallback = svgElement("circle", {
-      cx: iconX,
-      cy: 28,
-      r: 12,
-      fill: "#aaa6a0"
+    const author = svgElement("text", {
+      x: 0, y: 27, "text-anchor": "start",
+      "font-size": 13, fill: "#777777"
     });
-
-    authorGroup.appendChild(fallback);
-
+    const nameChars = Array.from(w.author);
+    author.textContent = nameChars.length > 13 ? nameChars.slice(0, 12).join("") + "…" : w.author;
+    // 実際の文字幅を測り、アイコンと名前を一組として中央に置く。
+    authorGroup.appendChild(author);
+    node.appendChild(authorGroup);
+    group.appendChild(node);
+    const measured = author.getComputedTextLength();
+    const nameWidth = Math.min(176, measured || Array.from(author.textContent).length * 13);
+    if (measured > 176) {
+      author.setAttribute("textLength", 176);
+      author.setAttribute("lengthAdjust", "spacingAndGlyphs");
+    }
+    const left = -(24 + 7 + nameWidth) / 2;
+    const iconX = left + 12;
+    author.setAttribute("x", left + 31);
+    const fallback = svgElement("circle", {
+      cx: iconX, cy: 23, r: 12, fill: "#aaa6a0"
+    });
+    authorGroup.prepend(fallback);
     if (w.icon) {
       const image = svgElement("image", {
-        href: w.icon,
-        x: iconX - 12,
-        y: 16,
-        width: 24,
-        height: 24,
-        preserveAspectRatio: "xMidYMid slice"
+        href: w.icon, x: iconX - 12, y: 11,
+        width: 24, height: 24, preserveAspectRatio: "xMidYMid slice"
       });
-
       image.style.clipPath = "circle(50%)";
-
-      authorGroup.appendChild(image);
+      authorGroup.insertBefore(image, author);
     }
-
-    authorGroup.appendChild(author);
+    const authorTip = svgElement("title");
+    authorTip.textContent = w.author;
+    authorGroup.appendChild(authorTip);
 
     if (w.profile) {
       const link = svgElement("a", {
