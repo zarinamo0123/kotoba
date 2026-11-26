@@ -492,8 +492,8 @@ function updateModeDescription() {
   if (!description) return;
   if (!selectedAuthor) {
     description.textContent = mobile.matches
-      ? "「参加者を選ぶ・探す」から、気になる作者を選んでください。"
-      : "参加者一覧から、気になる作者を選んでください。";
+      ? "「誰をたどる？」から、気になる作者を選んでください。"
+      : "「誰をたどる？」から、気になる作者を選んでください。";
     return;
   }
   const work = workMap.get(selectedWork);
@@ -776,7 +776,7 @@ function setSidebarCollapsed(collapsed) {
   );
 
   const label =
-    selectedAuthor || "参加者を選ぶ・探す";
+    selectedAuthor || "誰をたどる？";
 
   button.textContent =
     label + (collapsed ? "　▼" : "　▲");
@@ -1452,7 +1452,19 @@ function fitAuthorsGraph(){
   zoom=Math.min(1,svg.clientWidth/(maxX-minX),svg.clientHeight/(maxY-minY));offsetX=svg.clientWidth/2-(minX+maxX)/2*zoom;offsetY=svg.clientHeight/2-(minY+maxY)/2*zoom;updateTransform();
 }
 function createAuthorViewControls(){
-  const toolbar=document.querySelector(".toolbar");const select=document.createElement("select");select.setAttribute("aria-label","つながりの表示方法");select.add(new Option("作品のつながり","works"));select.add(new Option("作者のつながり","authors"));Object.assign(select.style,{padding:"8px",maxWidth:"100%",border:"1px solid #e2ded8",borderRadius:"5px",background:"white",color:"#333"});toolbar.prepend(select);
+  const toolbar = document.querySelector(".toolbar");
+  const area = document.createElement("div");
+  area.className = "view-area";
+  const label = document.createElement("label");
+  label.className = "control-label";
+  label.htmlFor = "view-mode";
+  label.textContent = "何をたどる？";
+  const select = document.createElement("select");
+  select.id = "view-mode";
+  select.add(new Option("作品のつながり", "works"));
+  select.add(new Option("作者のつながり", "authors"));
+  area.append(label, select);
+  toolbar.prepend(area);
   const panel=document.createElement("div");panel.id="author-details";panel.hidden=true;Object.assign(panel.style,{padding:"8px 12px",maxHeight:"120px",overflow:"auto",fontSize:"13px",background:"#fffdf8",color:"#51483b",overflowWrap:"anywhere"});const viewer=document.querySelector(".viewer");viewer.style.position="relative";Object.assign(panel.style,{position:"absolute",top:"70px",right:"10px",width:"min(360px, calc(100% - 20px))",boxSizing:"border-box",maxHeight:"min(240px, 40vh)",zIndex:"5",border:"1px solid #ddd5c6",borderRadius:"8px",boxShadow:"0 3px 12px #0002"});viewer.append(panel);
   select.onchange=()=>{authorView=select.value==="authors";chosenEdge="";authorDetails(null);document.querySelector(".mode-area").style.display=authorView?"none":"";syncFocusControls();renderAuthors();refreshSelection();};
 }
