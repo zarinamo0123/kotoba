@@ -1,0 +1,234 @@
+
+:root {
+  --background: #faf9f6;
+  --white: #ffffff;
+  --text: #333333;
+  --muted: #888888;
+  --accent: #b93636;
+  --border: #e2ded8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--text);
+  font-family: "Noto Sans JP", sans-serif;
+}
+
+header {
+  text-align: center;
+  padding: 30px 20px 24px;
+}
+
+.logo {
+  width: 38px;
+  height: 38px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  font-size: 25px;
+  line-height: 38px;
+  text-align: center;
+}
+
+h1 {
+  margin: 16px 0 8px;
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+}
+
+header p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  min-height: 600px;
+  height: 72vh;
+  margin: 0 24px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--white);
+  overflow: hidden;
+}
+
+.sidebar {
+  padding: 20px 14px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.sidebar h2 {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0 0 16px;
+}
+
+#authors {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.author-button {
+  width: 100%;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.author-button:hover {
+  background: #f4f2ee;
+}
+
+.author-button.active {
+  background: #f8eaea;
+  color: var(--accent);
+}
+
+.viewer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+button,
+select {
+  font: inherit;
+  font-size: 13px;
+}
+
+.toolbar button,
+.toolbar select {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: white;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.toolbar button:hover {
+  background: #f4f2ee;
+}
+
+.toolbar select {
+  margin-right: auto;
+}
+
+#tree {
+  display: block;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  background: #faf9f6;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+#tree:active {
+  cursor: grabbing;
+}
+
+#tree a {
+  cursor: pointer;
+}
+
+#tree a:hover text {
+  fill: var(--accent);
+  text-decoration: underline;
+}
+
+#status {
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#status:empty {
+  display: none;
+}
+
+footer {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 2;
+}
+
+footer a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+footer a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 700px) {
+  header {
+    padding: 22px 12px;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  .workspace {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+    margin: 0 10px;
+  }
+
+  .sidebar {
+    padding: 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  #authors {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .author-button {
+    width: auto;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .viewer {
+    height: 65vh;
+    min-height: 380px;
+  }
+}
