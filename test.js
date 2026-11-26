@@ -570,13 +570,17 @@ function render(measure = false) {
 
     if (!a || !b) return;
 
-    group.appendChild(svgElement("line", {
-      x1: a.x,
-      y1: a.y,
-      x2: b.x,
-      y2: b.y,
-      stroke: "#bcb7b0",
-      "stroke-width": 1.5
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const horizontal = Math.abs(dx) >= Math.abs(dy);
+    const c1 = horizontal ? {x:a.x+dx*0.5,y:a.y} : {x:a.x,y:a.y+dy*0.5};
+    const c2 = horizontal ? {x:b.x-dx*0.5,y:b.y} : {x:b.x,y:b.y-dy*0.5};
+    group.appendChild(svgElement("path", {
+      d: `M ${a.x} ${a.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${b.x} ${b.y}`,
+      fill: "none",
+      stroke: "#b9ad96",
+      "stroke-width": 1.5,
+      "stroke-linecap": "round"
     }));
   });
 
@@ -597,7 +601,7 @@ function render(measure = false) {
       y: -CARD_HEIGHT / 2,
       width: CARD_WIDTH,
       height: CARD_HEIGHT,
-      rx: 8,
+      rx: 11,
       fill: collision ? "#fbe1e1" : "#ffffff",
       stroke: collision ? "#b93636" : "#c9c4bd",
       "stroke-width": collision ? 3 : 1
@@ -609,8 +613,8 @@ function render(measure = false) {
       x: 0,
       y: -8,
       "text-anchor": "middle",
-      "font-size": 13,
-      "font-weight": 600,
+      "font-size": 16,
+      "font-weight": 700,
       fill: "#333333"
     });
 
@@ -619,19 +623,19 @@ function render(measure = false) {
     node.appendChild(title);
 
     const icon = svgElement("circle", {
-      cx: -65,
+      cx: -52,
       cy: 20,
-      r: 9,
+      r: 12,
       fill: "#aaa6a0"
     });
 
     node.appendChild(icon);
 
     const author = svgElement("text", {
-      x: 8,
+      x: -32,
       y: 24,
-      "text-anchor": "middle",
-      "font-size": 11,
+      "text-anchor": "start",
+      "font-size": 13,
       fill: "#777777"
     });
 
