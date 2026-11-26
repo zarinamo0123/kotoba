@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -13,7 +12,7 @@
     .mode-area {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 6px;
       min-width: 190px;
       margin-right: auto;
     }
@@ -26,15 +25,15 @@
       background: white;
       color: #333;
       font: inherit;
-      font-size: 13px;
+      font-size: 14px;
       cursor: pointer;
     }
 
     #mode-description {
       margin: 0;
       padding: 0 3px;
-      color: #888;
-      font-size: 11px;
+      color: #666;
+      font-size: 12px;
       line-height: 1.5;
     }
 
@@ -46,7 +45,7 @@
       }
 
       #mode-description {
-        font-size: 11px;
+        font-size: 12px;
       }
     }
   </style>
@@ -72,16 +71,33 @@
       <div class="toolbar">
 
         <div class="mode-area">
-          <select id="mode" aria-label="表示方法">
-            <option value="mine">この人の作品</option>
-            <option value="direct">ことばのバトン</option>
-            <option value="journey">ことばの行方</option>
-            <option value="roots">ルーツ</option>
+
+          <select id="mode"
+                  aria-label="表示方法"
+                  aria-describedby="mode-description">
+
+            <option value="mine">
+              この人の作品
+            </option>
+
+            <option value="direct">
+              乗っ取られた先
+            </option>
+
+            <option value="journey">
+              乗っ取られた先の先
+            </option>
+
+            <option value="roots">
+              乗っ取ってきた道
+            </option>
+
           </select>
 
-          <p id="mode-description">
-            選んだ人が投稿した作品を見る
+          <p id="mode-description" aria-live="polite">
+            参加者一覧から、気になる作者を選んでください。
           </p>
+
         </div>
 
         <button id="zoom-in" aria-label="拡大">＋</button>
