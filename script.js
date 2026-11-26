@@ -222,7 +222,8 @@ function render() {
       line.textContent = chars.slice(i, i + 15).join("");
 
       if (i === 30 && chars.length > 45) {
-        line.textContent = chars.slice(i, i + 14).join("") + "…";
+        line.textContent =
+          chars.slice(i, i + 14).join("") + "…";
       }
 
       title.appendChild(line);
@@ -257,7 +258,10 @@ function render() {
 
     const authorGroup = svgElement("g");
 
-    const iconX = -Math.min(98, w.author.length * 3 + 12);
+    const iconX = -Math.min(
+      98,
+      w.author.length * 3 + 12
+    );
 
     const fallback = svgElement("circle", {
       cx: iconX,
@@ -356,7 +360,10 @@ function setSidebarCollapsed(collapsed) {
 
   sidebar.classList.toggle("is-collapsed", collapsed);
 
-  button.setAttribute("aria-expanded", String(!collapsed));
+  button.setAttribute(
+    "aria-expanded",
+    String(!collapsed)
+  );
 
   const label = selectedAuthor || "参加者を選ぶ・探す";
 
@@ -375,7 +382,24 @@ function createSidebarToggle() {
   button.type = "button";
   button.setAttribute("aria-controls", "authors");
 
-  sidebar.prepend(button);
+  const controls = document.createElement("div");
+
+  controls.className = "sidebar-controls";
+
+  const allWorksButton = document.createElement("button");
+
+  allWorksButton.className = "all-works-button";
+  allWorksButton.type = "button";
+  allWorksButton.textContent = "すべての作品";
+
+  allWorksButton.addEventListener("click", () => {
+    selectAuthor("");
+  });
+
+  controls.appendChild(button);
+  controls.appendChild(allWorksButton);
+
+  sidebar.prepend(controls);
 
   button.addEventListener("click", () => {
     setSidebarCollapsed(
@@ -473,7 +497,8 @@ function renderAuthors() {
   const allButton = document.createElement("button");
 
   allButton.textContent = "すべての作品";
-  allButton.className = "author-button";
+  allButton.className =
+    "author-button all-works-list-button";
 
   allButton.classList.toggle(
     "active",
@@ -483,6 +508,21 @@ function renderAuthors() {
   allButton.onclick = () => selectAuthor("");
 
   list.appendChild(allButton);
+
+  const externalButton =
+    document.querySelector(".all-works-button");
+
+  if (externalButton) {
+    externalButton.classList.toggle(
+      "active",
+      selectedAuthor === ""
+    );
+
+    externalButton.setAttribute(
+      "aria-pressed",
+      String(selectedAuthor === "")
+    );
+  }
 
   const query = normalizeSearch(searchText);
 
