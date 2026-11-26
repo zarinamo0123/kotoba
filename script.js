@@ -1,10 +1,12 @@
-
 let works = [];
 let positions = new Map();
 
 let selectedAuthor = "";
 let searchText = "";
 let mode = "mine";
+let selectedWork = "";
+let relatedOnly = false;
+const collapsed = new Set();
 
 let zoom = 1;
 let offsetX = 0;
@@ -173,7 +175,7 @@ function calculateCompactLayout(levels, rootId) {
   const occupied = new Map();
 
   const cellWidth = CARD_WIDTH + GAP;
-  const cellHeight = CARD_HEIGHT + GAP;
+  const cellHeight = CARD_HEIGHT + GAP + 32;
 
   function cellKey(x, y) {
     return (
@@ -382,9 +384,11 @@ function highlighted() {
   const result = new Set();
 
   works
-    .filter(w => w.author === selectedAuthor)
+    .filter(w => w.author === selectedAuthor && (!selectedWork || w.id === selectedWork))
     .forEach(w => {
       result.add(w.id);
+
+      if (mode === "direct") children(w.id).forEach(c => result.add(c.id));
 
       if (mode === "journey") {
         descendants(w.id).forEach(id => {
@@ -400,6 +404,82 @@ function highlighted() {
     });
 
   return result;
+}
+
+function visibleWorks() {
+  const hidden = new Set();
+  collapsed.forEach(id => {
+    descendants(id).forEach(child => { if (child !== id) hidden.add(child); });
+  });
+  const active = highlighted();
+  return new Set(works.filter(w => !hidden.has(w.id) && (!selectedAuthor || !relatedOnly || active.has(w.id))).map(w => w.id));
+}
+
+function revealSelection() {
+  if (!selectedAuthor) return;
+  highlighted().forEach(id => {
+    ancestors(id).forEach(parent => { if (parent !== id) collapsed.delete(parent); });
+  });
+}
+
+function refreshSelection() {
+  revealSelection();
+  render();
+  requestAnimationFrame(fitTree);
+}
+
+function addBranchButton(node, w, active) {
+  const list = children(w.id);
+  if (!list.length) return;
+  if (selectedAuthor && relatedOnly && !list.some(c => active.has(c.id))) return;
+  const closed = collapsed.has(w.id);
+  const button = svgElement("g", {role:"button", tabindex:0, "aria-label":closed ? "つづきを開く" : "枝を折りたたむ", "aria-expanded":String(!closed)});
+  button.style.cursor = "pointer";
+  button.appendChild(svgElement("rect", {x:-48,y:32,width:96,height:40,fill:"transparent"}));
+  button.appendChild(svgElement("rect", {x:closed?-40:-12,y:40,width:closed?80:24,height:24,rx:12,fill:"white",stroke:closed?"#b93636":"#c9c4bd"}));
+  const label = svgElement("text", {x:0,y:56,"text-anchor":"middle","font-size":12,fill:closed?"#b93636":"#777"});
+  label.textContent = closed ? "つづき ▾" : "▴";
+  button.appendChild(label);
+  function toggle(e) {
+    e.preventDefault(); e.stopPropagation();
+    if (collapsed.has(w.id)) collapsed.delete(w.id); else collapsed.add(w.id);
+    render();
+  }
+  button.addEventListener("click", toggle);
+  button.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") toggle(e); });
+  node.appendChild(button);
+}
+
+function createFocusControls() {
+  const modeSelect = document.getElementById("mode");
+  const option = document.createElement("option");
+  option.value = "direct"; option.textContent = "ことばのバトン";
+  modeSelect.insertBefore(option, modeSelect.querySelector('option[value="journey"]'));
+  const panel = document.createElement("div");
+  panel.id = "focus-controls";
+  Object.assign(panel.style,{display:"none",flexWrap:"wrap",gap:"8px",alignItems:"center",padding:"8px 12px",borderBottom:"1px solid #e2ded8",fontSize:"13px"});
+  const select = document.createElement("select");
+  select.id = "focus-work"; select.setAttribute("aria-label","作品を選ぶ");
+  Object.assign(select.style,{maxWidth:"100%",minWidth:"0",padding:"8px",border:"1px solid #e2ded8",borderRadius:"5px",background:"white",flex:"1"});
+  select.onchange = () => { selectedWork = select.value; refreshSelection(); };
+  const label = document.createElement("label");
+  const check = document.createElement("input");
+  check.type = "checkbox"; check.id = "related-only";
+  check.onchange = () => { relatedOnly = check.checked; refreshSelection(); };
+  label.append(check, " 関係する作品だけを表示");
+  panel.append(select,label);
+  document.querySelector(".toolbar").after(panel);
+}
+
+function syncFocusControls() {
+  const panel = document.getElementById("focus-controls");
+  const select = document.getElementById("focus-work");
+  panel.style.display = selectedAuthor ? "flex" : "none";
+  document.getElementById("mode").disabled = !selectedAuthor;
+  document.getElementById("related-only").checked = relatedOnly;
+  select.replaceChildren(new Option("すべての自分の作品", ""));
+  works.filter(w => w.author === selectedAuthor).forEach(w => select.add(new Option(w.title,w.id)));
+  select.value = selectedWork;
 }
 
 function render() {
@@ -418,10 +498,11 @@ function render() {
   svg.appendChild(group);
 
   const active = highlighted();
+  const visible = visibleWorks();
 
   // 作品同士を結ぶ線
   works.forEach(w => {
-    if (!w.parent || !w.verified) return;
+    if (!w.parent || !w.verified || !visible.has(w.id) || !visible.has(w.parent)) return;
 
     const a = positions.get(w.parent);
     const b = positions.get(w.id);
@@ -450,9 +531,9 @@ function render() {
   works.forEach(w => {
     const p = positions.get(w.id);
 
-    if (!p) return;
+    if (!p || !visible.has(w.id)) return;
 
-    const own = selectedAuthor === w.author;
+    const own = selectedAuthor === w.author && (!selectedWork || selectedWork === w.id);
 
     const node = svgElement("g", {
       transform: `translate(${p.x} ${p.y})`,
@@ -577,6 +658,7 @@ function render() {
       node.appendChild(authorGroup);
     }
 
+    addBranchButton(node, w, active);
     group.appendChild(node);
   });
 }
@@ -601,7 +683,11 @@ function fitTree() {
 
   if (!svg.clientWidth || !svg.clientHeight) return;
 
-  const points = [...positions.values()];
+  const visible = visibleWorks();
+  const active = highlighted();
+  let points = [...positions.entries()].filter(([id]) => visible.has(id) && (!selectedAuthor || active.has(id))).map(([,p]) => p);
+  if (!points.length) points = [...positions.entries()].filter(([id]) => visible.has(id)).map(([,p]) => p);
+  if (!points.length) return;
 
   const minX =
     Math.min(...points.map(p => p.x)) - 140;
@@ -613,7 +699,7 @@ function fitTree() {
     Math.min(...points.map(p => p.y)) - 65;
 
   const maxY =
-    Math.max(...points.map(p => p.y)) + 65;
+    Math.max(...points.map(p => p.y)) + 90;
 
   zoom = Math.min(
     svg.clientWidth / (maxX - minX),
@@ -763,6 +849,9 @@ function createSearch() {
 
 function selectAuthor(name) {
   selectedAuthor = name;
+  selectedWork = "";
+  if (!name) { collapsed.clear(); relatedOnly = false; }
+  syncFocusControls();
 
   renderAuthors();
 
@@ -770,7 +859,7 @@ function selectAuthor(name) {
     setSidebarCollapsed(true);
   }
 
-  render();
+  refreshSelection();
 }
 
 function normalizeSearch(value) {
@@ -1184,6 +1273,8 @@ async function init() {
     }
 
     createSearch();
+    createFocusControls();
+    syncFocusControls();
     createSidebarToggle();
     renderAuthors();
 
@@ -1197,12 +1288,12 @@ async function init() {
       () => changeZoom(1 / 1.2);
 
     document.getElementById("reset").onclick =
-      fitTree;
+      () => { if (selectedAuthor) selectAuthor(""); else { collapsed.clear(); render(); fitTree(); } };
 
     document.getElementById("mode").onchange =
       e => {
         mode = e.target.value;
-        render();
+        refreshSelection();
       };
 
     setupGestures(svg);
