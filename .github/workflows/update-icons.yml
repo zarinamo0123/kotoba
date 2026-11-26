@@ -34,6 +34,8 @@ jobs:
           python <<'PY'
           import json
           import time
+          import re
+          import html
           import requests
           from bs4 import BeautifulSoup
           from urllib.parse import urlparse
@@ -53,14 +55,39 @@ jobs:
 
           session = requests.Session()
           session.headers.update({
-              "User-Agent": "KotobaGenealogy/1.0"
+              "User-Agent": "KotobaGenealogy/1.0",
+              "Accept-Language": "ja,en;q=0.9"
           })
+
+          def normalize(url):
+              if not isinstance(url, str):
+                  return ""
+
+              url = html.unescape(url)
+              url = url.replace("\\/", "/")
+              url = url.replace("\\u002F", "/")
+              url = url.replace("\\u0026", "&")
+              url = url.replace("\\u003D", "=")
+
+              return url.strip()
+
+          def valid_icon(url):
+              url = normalize(url)
+              parsed = urlparse(url)
+
+              return (
+                  parsed.scheme == "https"
+                  and parsed.hostname == "assets.st-note.com"
+                  and "/profile_" in parsed.path
+              )
 
           def get_icon(profile):
               parsed = urlparse(profile)
-              if parsed.scheme != "https":
-                  return ""
-              if parsed.hostname != "note.com":
+
+              if (
+                  parsed.scheme != "https"
+                  or parsed.hostname != "note.com"
+              ):
                   return ""
 
               try:
@@ -73,23 +100,63 @@ jobs:
                       response.text, "html.parser"
                   )
 
+                  print(f"確認中: {profile}")
+                  print(f"HTTP: {response.status_code}")
+
+                  # 方法1: メタ情報
                   for tag in soup.find_all("meta"):
                       key = tag.get("property") or tag.get("name")
-                      if key not in ("og:image", "twitter:image"):
-                          continue
 
-                      url = tag.get("content", "")
-                      parsed_url = urlparse(url)
+                      if key in ("og:image", "twitter:image"):
+                          url = normalize(tag.get("content", ""))
 
-                      if (
-                          parsed_url.scheme == "https"
-                          and parsed_url.hostname == "assets.st-note.com"
-                          and "/profile_" in parsed_url.path
-                      ):
-                          return url
+                          if valid_icon(url):
+                              print("メタ情報から取得")
+                              return url
+
+                  # 方法2: HTML内の画像
+                  candidates = set()
+
+                  for img in soup.find_all("img"):
+                      for attr in ("src", "data-src"):
+                          url = normalize(img.get(attr, ""))
+
+                          if valid_icon(url):
+                              candidates.add(url.split("?")[0])
+
+                  if len(candidates) == 1:
+                      print("HTML画像から取得")
+                      return next(iter(candidates))
+
+                  # 方法3: ページ内の埋め込みデータ
+                  source = normalize(response.text)
+
+                  pattern = (
+                      r'https://assets\.st-note\.com/'
+                      r'[^\s"<>\\]+?/profile_'
+                      r'[A-Za-z0-9_.-]+\.(?:jpg|jpeg|png|webp)'
+                  )
+
+                  matches = {
+                      url for url in re.findall(
+                          pattern, source, re.IGNORECASE
+                      )
+                      if valid_icon(url)
+                  }
+
+                  candidates.update(matches)
+
+                  if len(candidates) == 1:
+                      print("埋め込みデータから取得")
+                      return next(iter(candidates))
+
+                  if len(candidates) > 1:
+                      print("画像候補が複数あるため保留")
+                  else:
+                      print("プロフィール画像が見つかりません")
 
               except requests.RequestException as e:
-                  print(f"取得失敗: {profile}: {e}")
+                  print(f"アクセス失敗: {e}")
 
               return ""
 
@@ -100,6 +167,7 @@ jobs:
                   continue
 
               profile = work.get("profile", "")
+
               if not profile:
                   continue
 
@@ -119,7 +187,8 @@ jobs:
           if changed:
               with open(path, "w", encoding="utf-8") as f:
                   json.dump(
-                      works, f,
+                      works,
+                      f,
                       ensure_ascii=False,
                       indent=2
                   )
