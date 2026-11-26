@@ -89,7 +89,7 @@ function generateWorks(count, pattern) {
   return data;
 }
 
-function calculateLayout(improved) {
+function calculateLayout(layoutType) {
   positions.clear();
 
   const root = works.find(w => !w.parent);
@@ -172,7 +172,7 @@ function calculateLayout(improved) {
 
   place(root, 0, -Math.PI / 2, Math.PI * 1.5);
 
-  if (!improved) {
+  if (layoutType === "original") {
     const step = Math.max(
       260,
       ...Array.from(levels.entries()).map(
@@ -192,6 +192,11 @@ function calculateLayout(improved) {
     return;
   }
 
+  if (layoutType === "compact") {
+    calculateCompactLayout(levels, root.id);
+    return;
+  }
+
   const safeDistance = Math.hypot(
     CARD_WIDTH + GAP,
     CARD_HEIGHT + GAP
@@ -203,9 +208,7 @@ function calculateLayout(improved) {
     .sort((a, b) => a[0] - b[0]);
 
   sortedLevels.forEach(([depth, ids]) => {
-    if (depth === 0) {
-      return;
-    }
+    if (depth === 0) return;
 
     const angles = ids.map(
       id => positions.get(id).angle
@@ -248,6 +251,170 @@ function calculateLayout(improved) {
   });
 }
 
+function calculateCompactLayout(levels, rootId) {
+  const occupied = new Map();
+
+  const cellWidth = CARD_WIDTH + GAP;
+  const cellHeight = CARD_HEIGHT + GAP;
+
+  const workMap = new Map(
+    works.map(w => [w.id, w])
+  );
+
+  function cellKey(x, y) {
+    return (
+      Math.floor(x / cellWidth) + ":" +
+      Math.floor(y / cellHeight)
+    );
+  }
+
+  function isFree(x, y) {
+    const cx = Math.floor(x / cellWidth);
+    const cy = Math.floor(y / cellHeight);
+
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const key =
+          (cx + dx) + ":" + (cy + dy);
+
+        const nearby = occupied.get(key) || [];
+
+        for (const p of nearby) {
+          if (
+            Math.abs(x - p.x) < cellWidth &&
+            Math.abs(y - p.y) < cellHeight
+          ) {
+            return false;
+          }
+        }
+      }
+    }
+
+    return true;
+  }
+
+  function reserve(x, y) {
+    const key = cellKey(x, y);
+
+    if (!occupied.has(key)) {
+      occupied.set(key, []);
+    }
+
+    occupied.get(key).push({ x, y });
+  }
+
+  const root = positions.get(rootId);
+
+  root.x = 0;
+  root.y = 0;
+
+  reserve(0, 0);
+
+  const sortedLevels = [...levels.entries()]
+    .sort((a, b) => a[0] - b[0]);
+
+  sortedLevels.forEach(([depth, ids]) => {
+    if (depth === 0) return;
+
+    ids.sort((a, b) =>
+      positions.get(a).angle -
+      positions.get(b).angle
+    );
+
+    ids.forEach(id => {
+      const p = positions.get(id);
+      const work = workMap.get(id);
+      const parent = positions.get(work.parent);
+
+      const preferredAngle = p.angle;
+
+      const parentRadius = Math.hypot(
+        parent.x,
+        parent.y
+      );
+
+      let best = null;
+      let bestScore = Infinity;
+
+      for (let ring = 1; ring <= 24; ring++) {
+        const radius = ring * 125;
+
+        const samples = Math.max(
+          12,
+          Math.ceil(2 * Math.PI * radius / 70)
+        );
+
+        for (let i = 0; i < samples; i++) {
+          const angle =
+            preferredAngle +
+            i * Math.PI * 2 / samples;
+
+          const x =
+            parent.x + Math.cos(angle) * radius;
+
+          const y =
+            parent.y + Math.sin(angle) * radius;
+
+          if (!isFree(x, y)) continue;
+
+          const globalRadius = Math.hypot(x, y);
+
+          if (globalRadius < parentRadius + 40) {
+            continue;
+          }
+
+          const angleDifference = Math.abs(
+            Math.atan2(
+              Math.sin(angle - preferredAngle),
+              Math.cos(angle - preferredAngle)
+            )
+          );
+
+          const score =
+            radius +
+            globalRadius * 0.15 +
+            angleDifference * 90;
+
+          if (score < bestScore) {
+            bestScore = score;
+            best = { x, y };
+          }
+        }
+
+        if (best && (ring + 1) * 125 >= bestScore) {
+          break;
+        }
+      }
+
+      if (!best) {
+        let radius = Math.max(
+          parentRadius + 270,
+          depth * 260
+        );
+
+        while (!best) {
+          const x =
+            Math.cos(preferredAngle) * radius;
+
+          const y =
+            Math.sin(preferredAngle) * radius;
+
+          if (isFree(x, y)) {
+            best = { x, y };
+          } else {
+            radius += 270;
+          }
+        }
+      }
+
+      p.x = best.x;
+      p.y = best.y;
+
+      reserve(p.x, p.y);
+    });
+  });
+}
+
 function detectOverlaps() {
   overlapping.clear();
 
@@ -276,6 +443,67 @@ function detectOverlaps() {
   }
 
   return pairs;
+}
+
+function getBounds() {
+  const points = [...positions.values()];
+
+  const minX =
+    Math.min(...points.map(p => p.x)) -
+    CARD_WIDTH / 2;
+
+  const maxX =
+    Math.max(...points.map(p => p.x)) +
+    CARD_WIDTH / 2;
+
+  const minY =
+    Math.min(...points.map(p => p.y)) -
+    CARD_HEIGHT / 2;
+
+  const maxY =
+    Math.max(...points.map(p => p.y)) +
+    CARD_HEIGHT / 2;
+
+  return {
+    minX,
+    maxX,
+    minY,
+    maxY,
+    width: maxX - minX,
+    height: maxY - minY
+  };
+}
+
+function measureSize() {
+  const bounds = getBounds();
+
+  const area = bounds.width * bounds.height;
+
+  const density =
+    works.length *
+    CARD_WIDTH *
+    CARD_HEIGHT /
+    area * 100;
+
+  setResult(
+    "result-width",
+    Math.round(bounds.width).toLocaleString() + " px"
+  );
+
+  setResult(
+    "result-height",
+    Math.round(bounds.height).toLocaleString() + " px"
+  );
+
+  setResult(
+    "result-area",
+    (area / 1000000).toFixed(2) + " Mpx²"
+  );
+
+  setResult(
+    "result-density",
+    density.toFixed(2) + "%"
+  );
 }
 
 function render(measure = false) {
@@ -383,9 +611,10 @@ function render(measure = false) {
   if (measure) {
     const elapsed = performance.now() - start;
 
-    document.getElementById(
-      "result-render-time"
-    ).textContent = elapsed.toFixed(2) + " ms";
+    setResult(
+      "result-render-time",
+      elapsed.toFixed(2) + " ms"
+    );
   }
 }
 
@@ -406,33 +635,30 @@ function fitTree() {
 
   if (!positions.size) return;
 
-  const points = [...positions.values()];
+  if (!svg.clientWidth || !svg.clientHeight) return;
 
-  const minX =
-    Math.min(...points.map(p => p.x)) - 140;
-
-  const maxX =
-    Math.max(...points.map(p => p.x)) + 140;
-
-  const minY =
-    Math.min(...points.map(p => p.y)) - 65;
-
-  const maxY =
-    Math.max(...points.map(p => p.y)) + 65;
+  const bounds = getBounds();
 
   zoom = Math.min(
-    svg.clientWidth / (maxX - minX),
-    svg.clientHeight / (maxY - minY),
+    svg.clientWidth / (bounds.width + 50),
+    svg.clientHeight / (bounds.height + 50),
     1
   );
 
   offsetX =
-    svg.clientWidth / 2 - (minX + maxX) / 2 * zoom;
+    svg.clientWidth / 2 -
+    (bounds.minX + bounds.maxX) / 2 * zoom;
 
   offsetY =
-    svg.clientHeight / 2 - (minY + maxY) / 2 * zoom;
+    svg.clientHeight / 2 -
+    (bounds.minY + bounds.maxY) / 2 * zoom;
 
   updateTransform();
+
+  setResult(
+    "result-fit-zoom",
+    (zoom * 100).toFixed(3) + "%"
+  );
 }
 
 function changeZoom(factor, x, y) {
@@ -457,6 +683,8 @@ function changeZoom(factor, x, y) {
 function setResult(id, value, good = null) {
   const el = document.getElementById(id);
 
+  if (!el) return;
+
   el.textContent = value;
 
   el.classList.remove("result-good", "result-bad");
@@ -476,9 +704,8 @@ function runTest() {
   const pattern =
     document.getElementById("tree-pattern").value;
 
-  const improved =
-    document.getElementById("layout-type").value
-      === "improved";
+  const layoutType =
+    document.getElementById("layout-type").value;
 
   const key = count + ":" + pattern;
 
@@ -489,7 +716,7 @@ function runTest() {
 
   const start = performance.now();
 
-  calculateLayout(improved);
+  calculateLayout(layoutType);
 
   const layoutTime = performance.now() - start;
 
@@ -519,6 +746,8 @@ function runTest() {
     "result-time",
     layoutTime.toFixed(2) + " ms"
   );
+
+  measureSize();
 
   render(true);
 
