@@ -40,12 +40,18 @@ jobs:
               r'https://note\.com/([^/\s"<>]+)/n/(n[0-9a-f]+)'
           )
 
-          registered = set()
+          registered = {}
 
           for work in works:
               match = pattern.search(work.get("url", ""))
               if match:
-                  registered.add(match.group(2))
+                  registered[match.group(2)] = work
+
+          session = requests.Session()
+          session.headers.update({
+              "User-Agent": "KotobaGenealogy/1.0",
+              "Accept-Language": "ja,en;q=0.9"
+          })
 
           sources = {
               "ハッシュタグ": (
@@ -58,12 +64,6 @@ jobs:
               )
           }
 
-          session = requests.Session()
-          session.headers.update({
-              "User-Agent": "KotobaGenealogy/1.0",
-              "Accept-Language": "ja,en;q=0.9"
-          })
-
           discovered = {}
 
           for name, url in sources.items():
@@ -72,7 +72,6 @@ jobs:
 
               try:
                   response = session.get(url, timeout=30)
-                  print(f"HTTP: {response.status_code}")
                   response.raise_for_status()
 
                   soup = BeautifulSoup(
@@ -100,39 +99,151 @@ jobs:
                           f"https://note.com/{author}/n/{article_id}"
                       )
 
-                  print(f"検出URL数: {len(found)}")
-
-                  for article_id, article_url in found.items():
-                      discovered[article_id] = article_url
-
-                      status = (
-                          "登録済み"
-                          if article_id in registered
-                          else "新着候補"
-                      )
-
-                      print(f"{status}: {article_url}")
+                  discovered.update(found)
+                  print(f"検出作品数: {len(found)}")
 
               except requests.RequestException as e:
                   print(f"取得失敗: {e}")
 
               time.sleep(2)
 
-          new_works = {
-              key: value
-              for key, value in discovered.items()
-              if key not in registered
-          }
+          def meta(soup, key):
+              tag = soup.find("meta", property=key)
+              if not tag:
+                  tag = soup.find("meta", attrs={"name": key})
+              return tag.get("content", "") if tag else ""
+
+          pages = {}
+
+          for article_id, url in discovered.items():
+              print("=" * 50)
+              print(f"記事URL: {url}")
+
+              try:
+                  response = session.get(url, timeout=30)
+                  response.raise_for_status()
+
+                  soup = BeautifulSoup(
+                      response.text, "html.parser"
+                  )
+
+                  title = meta(soup, "og:title")
+                  author = meta(soup, "author")
+
+                  if not author and "｜" in title:
+                      author = title.rsplit("｜", 1)[1].strip()
+
+                  h1 = soup.find("h1")
+
+                  if h1:
+                      title = h1.get_text(strip=True)
+                  elif "｜" in title:
+                      title = title.rsplit("｜", 1)[0].strip()
+
+                  match = pattern.search(url)
+                  profile = (
+                      f"https://note.com/{match.group(1)}"
+                  )
+
+                  body = soup.select_one(
+                      ".note-common-styles__textnote-body"
+                  )
+
+                  if not body:
+                      body = soup.select_one(
+                          '[data-name="body"]'
+                      )
+
+                  body_text = ""
+                  candidates = set()
+
+                  if body:
+                      body_text = body.get_text(" ", strip=True)
+
+                      for link in body.find_all("a", href=True):
+                          href = urljoin(url, link["href"])
+                          target = pattern.search(href)
+
+                          if target:
+                              target_id = target.group(2)
+
+                              if (
+                                  target_id != article_id
+                                  and (
+                                      target_id in registered
+                                      or target_id in discovered
+                                  )
+                              ):
+                                  candidates.add(target_id)
+
+                  pages[article_id] = {
+                      "title": title,
+                      "author": author,
+                      "profile": profile,
+                      "body": body_text,
+                      "candidates": candidates
+                  }
+
+                  print(f"タイトル: {title}")
+                  print(f"作者名: {author or '取得できず'}")
+                  print(f"プロフィール: {profile}")
+                  print(f"本文取得: {'成功' if body_text else '失敗'}")
+                  print(f"乗っ取り元候補数: {len(candidates)}")
+
+                  for candidate in sorted(candidates):
+                      print(f"候補: {candidate}")
+
+              except requests.RequestException as e:
+                  print(f"記事取得失敗: {e}")
+
+              time.sleep(2)
 
           print("=" * 50)
-          print("検出結果")
+          print("乗っ取り元の判定テスト")
+
+          for article_id, page in pages.items():
+              existing = registered.get(article_id, {})
+
+              if article_id in registered and not existing.get("parent"):
+                  continue
+
+              print("-" * 40)
+              print(f"作品: {page['title']}")
+
+              matches = []
+
+              for candidate in page["candidates"]:
+                  parent_page = pages.get(candidate)
+
+                  if not parent_page:
+                      continue
+
+                  if (
+                      page["title"]
+                      and page["title"] in parent_page["body"]
+                  ):
+                      matches.append(candidate)
+
+              if len(matches) == 1:
+                  candidate = matches[0]
+                  parent = registered.get(candidate, {})
+
+                  print("判定: 乗っ取り元候補を特定")
+                  print(f"乗っ取り元: {pages[candidate]['title']}")
+                  print(f"乗っ取り元URL: {discovered[candidate]}")
+
+                  if article_id in registered:
+                      correct = existing.get("parent") == parent.get("id")
+                      print(f"登録済みデータとの一致: {correct}")
+
+              else:
+                  print("判定: 保留")
+                  print(f"本文一致候補数: {len(matches)}")
+
+          print("=" * 50)
           print(f"登録済み作品数: {len(registered)}")
           print(f"検出作品数: {len(discovered)}")
-          print(f"新着候補数: {len(new_works)}")
-
-          for url in new_works.values():
-              print(f"新着候補: {url}")
-
+          print(f"記事取得数: {len(pages)}")
           print("検証完了")
           print("works.json は変更していません")
           PY
