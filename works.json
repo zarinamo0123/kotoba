@@ -28,7 +28,7 @@
     "profile": "https://note.com/amagappa934",
     "icon": "",
     "parent": "001",
-    "verified": false
+    "verified": true
   },
   {
     "id": "004",
@@ -38,7 +38,7 @@
     "profile": "https://note.com/tokking59",
     "icon": "",
     "parent": "001",
-    "verified": false
+    "verified": true
   },
   {
     "id": "005",
@@ -48,7 +48,7 @@
     "profile": "https://note.com/hip_loris6786",
     "icon": "",
     "parent": "001",
-    "verified": false
+    "verified": true
   },
   {
     "id": "006",
@@ -58,6 +58,6 @@
     "profile": "https://note.com/glad_jacana2818",
     "icon": "",
     "parent": "001",
-    "verified": false
+    "verified": true
   }
 ]
