@@ -79,13 +79,22 @@ jobs:
 
               for link in soup.find_all("a", href=True):
                   href = urljoin(url, link["href"])
-                  match = pattern.match(href)
+                  match = pattern.search(href)
 
                   if match:
                       user, article_id = match.groups()
                       found[article_id] = (
                           f"https://note.com/{user}/n/{article_id}"
                       )
+
+              source = response.text.replace("\\/", "/")
+              source = source.replace("\\u002F", "/")
+
+              for match in pattern.finditer(source):
+                  user, article_id = match.groups()
+                  found[article_id] = (
+                      f"https://note.com/{user}/n/{article_id}"
+                  )
 
               return found
 
@@ -105,6 +114,12 @@ jobs:
 
           print(f"ハッシュタグ: {len(hashtag)}作品")
           print(f"専用マガジン: {len(magazine)}作品")
+
+          if not magazine:
+              raise RuntimeError(
+                  "専用マガジンから作品を取得できませんでした。"
+                  "安全のため登録処理を中止します。"
+              )
 
           for article_id in hashtag:
               if article_id not in magazine:
@@ -300,6 +315,7 @@ jobs:
                       print(f"登録候補: {page['title']}")
                       print(f"作者: {page['author']}")
                       print(f"乗っ取り元: {parent['title']}")
+                      print(f"記事URL: {url}")
 
                   except Exception as e:
                       reasons[article_id] = str(e)
