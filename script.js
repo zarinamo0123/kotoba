@@ -424,7 +424,7 @@ function revealSelection() {
 
 function refreshSelection() {
   updateModeDescription();
-  revealSelection();
+  if(!authorView) revealSelection();
   render();
   requestAnimationFrame(fitTree);
 }
@@ -478,7 +478,7 @@ function createFocusControls() {
 function syncFocusControls() {
   const panel = document.getElementById("focus-controls");
   const select = document.getElementById("focus-work");
-  panel.style.display = selectedAuthor ? "flex" : "none";
+  panel.style.display = selectedAuthor && !authorView ? "flex" : "none";
   document.getElementById("mode").disabled = !selectedAuthor;
   document.getElementById("related-only").checked = relatedOnly;
   select.replaceChildren(new Option(selectedAuthor + "のすべての作品", ""));
@@ -508,6 +508,8 @@ function updateModeDescription() {
 }
 
 function render() {
+  if(authorView){renderAuthorsGraph();return;}
+  document.getElementById("status").textContent="";
   const svg = document.getElementById("tree");
 
   if (!svg) return;
@@ -702,6 +704,7 @@ function updateTransform() {
 }
 
 function fitTree() {
+  if(authorView){fitAuthorsGraph();return;}
   const svg = document.getElementById("tree");
 
   if (!svg || !positions.size) return;
@@ -875,6 +878,7 @@ function createSearch() {
 
 function selectAuthor(name) {
   selectedAuthor = name;
+  chosenEdge=""; authorDetails(null);
   selectedWork = "";
   if (!name) { collapsed.clear(); relatedOnly = false; }
   syncFocusControls();
@@ -929,7 +933,7 @@ function renderAuthors() {
   const allButton =
     document.createElement("button");
 
-  allButton.textContent = "すべての作品";
+  allButton.textContent = authorView ? "すべての作者" : "すべての作品";
 
   allButton.className =
     "author-button all-works-list-button";
@@ -947,6 +951,7 @@ function renderAuthors() {
     document.querySelector(".all-works-button");
 
   if (externalButton) {
+    externalButton.textContent=authorView?"すべての作者":"すべての作品";
     externalButton.classList.toggle(
       "active",
       selectedAuthor === ""
@@ -1298,6 +1303,8 @@ async function init() {
       throw new Error("起点作品が見つかりません");
     }
 
+    buildAuthorGraph();
+    createAuthorViewControls();
     createSearch();
     createFocusControls();
     syncFocusControls();
@@ -1314,7 +1321,7 @@ async function init() {
       () => changeZoom(1 / 1.2);
 
     document.getElementById("reset").onclick =
-      () => { if (selectedAuthor) selectAuthor(""); else { collapsed.clear(); render(); fitTree(); } };
+      () => { if (selectedAuthor) selectAuthor(""); else { collapsed.clear(); chosenEdge=""; authorDetails(null); render(); fitTree(); } };
 
     document.getElementById("mode").onchange =
       e => {
@@ -1348,5 +1355,116 @@ async function init() {
     console.error(error);
   }
 }
+
+let authorView = false;
+
+let chosenEdge = "";
+let authorPoints = new Map();
+let authorEdges = new Map();
+function buildAuthorGraph() {
+  const names = [...new Set(works.map(w => w.author))].sort((a,b)=>a.localeCompare(b,"ja",{numeric:true}));
+  const byId = new Map(works.map(w=>[w.id,w]));
+  authorPoints = new Map(); authorEdges = new Map();
+  works.forEach(w=>{
+    const parent=byId.get(w.parent);
+    if(w.verified!==true || !parent || parent.verified!==true || parent.author===w.author)return;
+    const pair=[parent.author,w.author].sort(); const key=JSON.stringify(pair);
+    if(!authorEdges.has(key))authorEdges.set(key,{a:pair[0],b:pair[1],links:[]});
+    authorEdges.get(key).links.push({parent,child:w});
+  });
+  layoutAuthors(names);
+}
+function layoutAuthors(names) {
+  const n=names.length;
+  if(!n)return;
+  let seed=20261126; const random=()=>((seed=(seed*1664525+1013904223)>>>0)/4294967296);
+  const radius=Math.sqrt(n)*95;
+  const nodes=names.map((name,i)=>{
+    const angle=i*2.399963229728653;
+    const r=radius*Math.sqrt((i+0.5)/n);
+    return {name,x:r*Math.cos(angle)+random(),y:r*Math.sin(angle)*0.75+random(),dx:0,dy:0};
+  });
+  const map=new Map(nodes.map(p=>[p.name,p]));
+  const edges=[...authorEdges.values()].map(e=>[map.get(e.a),map.get(e.b)]);
+  for(let t=0;t<220;t++){
+    const cap=24*(1-t/220)+1;
+    for(const p of nodes){p.dx=-p.x*0.012;p.dy=-p.y*0.012;}
+    for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){
+      const a=nodes[i],b=nodes[j],x=b.x-a.x,y=b.y-a.y,d=Math.max(1,Math.hypot(x,y));
+      const f=18000/(d*d);
+      a.dx-=x/d*f;b.dx+=x/d*f;a.dy-=y/d*f;b.dy+=y/d*f;
+    }
+    for(const [a,b] of edges){
+      const x=b.x-a.x,y=b.y-a.y,d=Math.max(1,Math.hypot(x,y)),f=(d-185)*0.055;
+      a.dx+=x/d*f;b.dx-=x/d*f;a.dy+=y/d*f;b.dy-=y/d*f;
+    }
+    for(const p of nodes){const d=Math.max(1,Math.hypot(p.dx,p.dy)),k=Math.min(1,cap/d);p.x+=p.dx*k;p.y+=p.dy*k;}
+    for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){
+      const a=nodes[i],b=nodes[j],x=b.x-a.x,y=b.y-a.y,ox=170-Math.abs(x),oy=94-Math.abs(y);
+      if(ox>0&&oy>0){if(ox<oy){const k=(ox+0.1)/2*(x>=0?1:-1);a.x-=k;b.x+=k;}else{const k=(oy+0.1)/2*(y>=0?1:-1);a.y-=k;b.y+=k;}}
+    }
+  }
+  // Final deterministic collision guard, including name labels.
+  const placed=[];
+  for(const p of nodes){
+    const free=(x,y)=>placed.every(q=>Math.abs(q.x-x)>=170||Math.abs(q.y-y)>=94);
+    if(!free(p.x,p.y)){
+      const x=p.x,y=p.y;
+      search: for(let ring=1;;ring++)for(let k=0;k<ring*16;k++){
+        const angle=k*2*Math.PI/(ring*16),xx=x+ring*12*Math.cos(angle),yy=y+ring*12*Math.sin(angle);
+        if(free(xx,yy)){p.x=xx;p.y=yy;break search;}
+      }
+    }
+    placed.push(p);authorPoints.set(p.name,{x:p.x,y:p.y});
+  }
+
+}
+function authorDetails(edge) {
+  const panel=document.getElementById("author-details");
+  panel.replaceChildren(); panel.hidden=!edge;
+  if(!edge)return;
+  const close=document.createElement("button");close.textContent="閉じる ×";close.style.cssText="float:right;cursor:pointer;background:white;border:1px solid #ddd;border-radius:4px;padding:5px";close.onclick=()=>{chosenEdge="";authorDetails(null);renderAuthorsGraph();};panel.append(close);
+  const heading=document.createElement("strong");heading.textContent="二人をつないだ作品";panel.append(heading);
+  edge.links.forEach(({parent,child})=>{
+    const p=document.createElement("div");p.style.cssText="clear:both;border-top:1px solid #e2ded8;margin-top:8px;padding-top:8px";
+    for(const text of ["乗っ取り元："+parent.author+"「"+parent.title+"」","↓ ことばを乗っ取り","乗っ取った作品："+child.author+"「"+child.title+"」"]){const line=document.createElement("div"); const work=text.startsWith("乗っ取り元：")?parent:text.startsWith("乗っ取った作品：")?child:null; if(work&&work.url){const link=document.createElement("a");link.href=work.url;link.target="_blank";link.rel="noopener noreferrer";link.textContent=text;line.append(link);}else line.textContent=text;p.append(line);}panel.append(p);
+  });
+}
+function activateGraph(el,fn){el.setAttribute("role","button");el.setAttribute("tabindex","0");el.style.cursor="pointer";el.addEventListener("click",e=>{e.stopPropagation();fn();});el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();fn();}});}
+function renderAuthorsGraph(){
+  const svg=document.getElementById("tree");svg.replaceChildren();
+  const group=svgElement("g",{id:"tree-content",transform:`translate(${offsetX} ${offsetY}) scale(${zoom})`});svg.append(group);
+  const neighbors=new Set(selectedAuthor?[selectedAuthor]:[]);
+  authorEdges.forEach(e=>{if(e.a===selectedAuthor)neighbors.add(e.b);if(e.b===selectedAuthor)neighbors.add(e.a);});
+  const entries=[...authorEdges.entries()].sort(([,a],[,b])=>Number(a.a===selectedAuthor||a.b===selectedAuthor)-Number(b.a===selectedAuthor||b.b===selectedAuthor));
+  entries.forEach(([key,e])=>{
+    const a=authorPoints.get(e.a),b=authorPoints.get(e.b),active=!selectedAuthor||e.a===selectedAuthor||e.b===selectedAuthor;
+    const attrs={x1:a.x,y1:a.y,x2:b.x,y2:b.y};
+    const g=svgElement("g",{"aria-label":e.a+" と "+e.b+" のつながり"});
+    g.append(svgElement("line",{...attrs,stroke:key===chosenEdge?"#b93636":"#a49e96","stroke-width":1.5,opacity:active?1:0.12}));
+    if(active){g.append(svgElement("line",{...attrs,stroke:"transparent","stroke-width":14,"vector-effect":"non-scaling-stroke"}));activateGraph(g,()=>{chosenEdge=key;authorDetails(e);renderAuthorsGraph();});}
+    group.append(g);
+  });
+  authorPoints.forEach((p,name)=>{
+    const g=svgElement("g",{transform:`translate(${p.x} ${p.y})`,opacity:!selectedAuthor||neighbors.has(name)?1:0.22,"aria-label":name,"aria-pressed":String(name===selectedAuthor)});
+    g.append(svgElement("circle",{r:25,fill:"#e9e4dc",stroke:name===selectedAuthor?"#b93636":"#bcb7b0","stroke-width":2}));
+    const initial=svgElement("text",{y:5,"text-anchor":"middle","font-size":15,fill:"#555"});initial.textContent=Array.from(name)[0]||"?";g.append(initial); const icon=works.find(w=>w.author===name&&w.icon)?.icon; if(icon){const img=svgElement("image",{href:icon,x:-23,y:-23,width:46,height:46,preserveAspectRatio:"xMidYMid slice"});img.style.clipPath="circle(50%)";g.append(img);}
+    g.append(svgElement("rect",{x:-78,y:30,width:156,height:24,rx:4,fill:"white"}));
+    const label=svgElement("text",{y:46,"text-anchor":"middle","font-size":12,fill:"#333"});label.textContent=Array.from(name).length>12?Array.from(name).slice(0,11).join("")+"…":name; const tip=svgElement("title");tip.textContent=name;g.append(tip);g.append(label);
+    activateGraph(g,()=>{selectAuthor(selectedAuthor===name?"":name);});group.append(g);
+  });
+  document.getElementById("status").textContent=selectedAuthor?selectedAuthor+" と直接つながった作者を表示中。線を押すと作品が分かります。":"作者を押すとつながりが強調されます。線を押すと作品が分かります。";
+}
+function fitAuthorsGraph(){
+  const svg=document.getElementById("tree"),p=[...authorPoints.values()];if(!p.length||!svg.clientWidth||!svg.clientHeight)return;
+  const minX=Math.min(...p.map(a=>a.x))-90,maxX=Math.max(...p.map(a=>a.x))+90,minY=Math.min(...p.map(a=>a.y))-45,maxY=Math.max(...p.map(a=>a.y))+75;
+  zoom=Math.min(1,svg.clientWidth/(maxX-minX),svg.clientHeight/(maxY-minY));offsetX=svg.clientWidth/2-(minX+maxX)/2*zoom;offsetY=svg.clientHeight/2-(minY+maxY)/2*zoom;updateTransform();
+}
+function createAuthorViewControls(){
+  const toolbar=document.querySelector(".toolbar");const select=document.createElement("select");select.setAttribute("aria-label","つながりの表示方法");select.add(new Option("作品のつながり","works"));select.add(new Option("作者のつながり","authors"));Object.assign(select.style,{padding:"8px",maxWidth:"100%",border:"1px solid #e2ded8",borderRadius:"5px",background:"white",color:"#333"});toolbar.prepend(select);
+  const panel=document.createElement("div");panel.id="author-details";panel.hidden=true;Object.assign(panel.style,{padding:"8px 12px",maxHeight:"120px",overflow:"auto",fontSize:"13px",background:"#faf9f6",overflowWrap:"anywhere"});const viewer=document.querySelector(".viewer");viewer.style.position="relative";Object.assign(panel.style,{position:"absolute",top:"70px",right:"10px",width:"min(360px, calc(100% - 20px))",boxSizing:"border-box",maxHeight:"min(240px, 40vh)",zIndex:"5",border:"1px solid #e2ded8",borderRadius:"8px",boxShadow:"0 3px 12px #0002"});viewer.append(panel);
+  select.onchange=()=>{authorView=select.value==="authors";chosenEdge="";authorDetails(null);document.querySelector(".mode-area").style.display=authorView?"none":"";syncFocusControls();renderAuthors();refreshSelection();};
+}
+
 
 document.addEventListener("DOMContentLoaded", init);
