@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: update-profile-icons
+  group: update-works
   cancel-in-progress: false
 
 jobs:
