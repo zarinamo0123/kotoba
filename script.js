@@ -2,6 +2,7 @@
 let works = [];
 let positions = new Map();
 let selectedAuthor = "";
+let searchText = "";
 let mode = "mine";
 let zoom = 1;
 let offsetX = 0;
@@ -33,19 +34,23 @@ function descendants(id, found = new Set()) {
 function ancestors(id) {
   const found = new Set();
   let work = works.find(w => w.id === id);
+
   while (work && !found.has(work.id)) {
     found.add(work.id);
     if (!work.verified) break;
     work = works.find(w => w.id === work.parent);
   }
+
   return found;
 }
 
 function layout() {
   positions.clear();
+
   const root = works.find(w =>
     !w.parent && w.verified
   );
+
   if (!root) return;
 
   const levels = new Map();
@@ -54,15 +59,20 @@ function layout() {
     if (positions.has(work.id)) return;
 
     const angle = (start + end) / 2;
+
     positions.set(work.id, { depth, angle });
 
-    levels.set(depth, (levels.get(depth) || 0) + 1);
+    levels.set(
+      depth,
+      (levels.get(depth) || 0) + 1
+    );
 
     const list = children(work.id);
     const weights = list.map(w => descendants(w.id).size);
     const total = weights.reduce((a, b) => a + b, 0);
 
     let cursor = start;
+
     list.forEach((child, i) => {
       const span = (end - start) * weights[i] / total;
       place(child, depth + 1, cursor, cursor + span);
@@ -131,14 +141,15 @@ function render() {
   });
 
   svg.appendChild(group);
+
   const active = highlighted();
 
-  // 確認済みの乗っ取り関係だけを結ぶ
   works.forEach(w => {
     if (!w.parent || !w.verified) return;
 
     const a = positions.get(w.parent);
     const b = positions.get(w.id);
+
     if (!a || !b) return;
 
     const focused = active.has(w.id) &&
@@ -156,7 +167,6 @@ function render() {
     }));
   });
 
-  // すべての作品を同じ大きさで表示
   works.forEach(w => {
     const p = positions.get(w.id);
     if (!p) return;
@@ -189,13 +199,16 @@ function render() {
     });
 
     const chars = Array.from(w.title);
+
     for (let i = 0; i < chars.length; i += 15) {
       const line = svgElement("tspan", {
         x: 0,
         y: -22 + (i / 15) * 15
       });
+
       line.textContent = chars.slice(i, i + 15).join("");
       title.appendChild(line);
+
       if (i >= 30) break;
     }
 
@@ -209,8 +222,10 @@ function render() {
         target: "_blank",
         rel: "noopener noreferrer"
       });
+
       link.appendChild(title);
       node.appendChild(link);
+
     } else {
       node.appendChild(title);
     }
@@ -222,10 +237,23 @@ function render() {
       "font-size": 11,
       fill: "#777777"
     });
+
     author.textContent = w.author;
 
     const authorGroup = svgElement("g");
-    const iconX = -Math.min(98, w.author.length * 3 + 12);
+
+    const iconX = -Math.min(
+      98, w.author.length * 3 + 12
+    );
+
+    const fallback = svgElement("circle", {
+      cx: iconX,
+      cy: 24,
+      r: 9,
+      fill: "#aaa6a0"
+    });
+
+    authorGroup.appendChild(fallback);
 
     if (w.icon) {
       const image = svgElement("image", {
@@ -233,17 +261,13 @@ function render() {
         x: iconX - 9,
         y: 15,
         width: 18,
-        height: 18
+        height: 18,
+        preserveAspectRatio: "xMidYMid slice"
       });
+
       image.style.clipPath = "circle(50%)";
+
       authorGroup.appendChild(image);
-    } else {
-      authorGroup.appendChild(svgElement("circle", {
-        cx: iconX,
-        cy: 24,
-        r: 9,
-        fill: "#aaa6a0"
-      }));
     }
 
     authorGroup.appendChild(author);
@@ -254,8 +278,10 @@ function render() {
         target: "_blank",
         rel: "noopener noreferrer"
       });
+
       link.appendChild(authorGroup);
       node.appendChild(link);
+
     } else {
       node.appendChild(authorGroup);
     }
@@ -266,9 +292,11 @@ function render() {
 
 function fitTree() {
   const svg = document.getElementById("tree");
+
   if (!svg || !positions.size) return;
 
   const points = [...positions.values()];
+
   const minX = Math.min(...points.map(p => p.x)) - 140;
   const maxX = Math.max(...points.map(p => p.x)) + 140;
   const minY = Math.min(...points.map(p => p.y)) - 65;
@@ -291,52 +319,249 @@ function fitTree() {
 
 function changeZoom(factor, x, y) {
   const svg = document.getElementById("tree");
+
   x = x ?? svg.clientWidth / 2;
   y = y ?? svg.clientHeight / 2;
 
-  const next = Math.max(0.05, Math.min(4, zoom * factor));
+  const next = Math.max(
+    0.05, Math.min(4, zoom * factor)
+  );
+
   offsetX = x - (x - offsetX) * next / zoom;
   offsetY = y - (y - offsetY) * next / zoom;
+
   zoom = next;
+
   render();
 }
 
+// 参加者一覧の検索欄を作成
+function createSearch() {
+  const list = document.getElementById("authors");
+
+  if (document.getElementById("author-search")) return;
+
+  const input = document.createElement("input");
+
+  input.id = "author-search";
+  input.type = "search";
+  input.placeholder = "作者名で検索";
+  input.setAttribute("aria-label", "作者名で検索");
+
+  Object.assign(input.style, {
+    width: "100%",
+    padding: "10px 12px",
+    marginBottom: "12px",
+    border: "1px solid #e2ded8",
+    borderRadius: "5px",
+    background: "#ffffff",
+    fontSize: "13px",
+    outlineColor: "#b93636"
+  });
+
+  input.addEventListener("input", () => {
+    searchText = input.value;
+    renderAuthors();
+  });
+
+  list.before(input);
+}
+
+// 作者を選択
+function selectAuthor(name) {
+  selectedAuthor = name;
+  renderAuthors();
+  render();
+}
+
+// 検索文字の正規化
+function normalizeSearch(value) {
+  return value.normalize("NFKC")
+    .toLocaleLowerCase("ja")
+    .trim();
+}
+
+// アイコン付き参加者一覧
 function renderAuthors() {
   const list = document.getElementById("authors");
+
   list.replaceChildren();
 
-  const names = [...new Set(works.map(w => w.author))]
-    .sort((a, b) => a.localeCompare(b, "ja"));
+  const authors = new Map();
 
-  ["", ...names].forEach(name => {
-    const button = document.createElement("button");
-    button.textContent = name || "すべての作品";
-    button.className = "author-button";
-    button.classList.toggle("active", name === selectedAuthor);
+  works.forEach(w => {
+    if (!authors.has(w.author)) {
+      authors.set(w.author, {
+        name: w.author,
+        icon: w.icon || "",
+        profile: w.profile || ""
+      });
 
-    button.onclick = () => {
-      selectedAuthor = name;
-      renderAuthors();
-      render();
-    };
+    } else {
+      const data = authors.get(w.author);
 
-    list.appendChild(button);
+      if (!data.icon && w.icon) {
+        data.icon = w.icon;
+      }
+
+      if (!data.profile && w.profile) {
+        data.profile = w.profile;
+      }
+    }
   });
+
+  const names = [...authors.values()]
+    .sort((a, b) =>
+      a.name.localeCompare(b.name, "ja")
+    );
+
+  const allButton = document.createElement("button");
+
+  allButton.textContent = "すべての作品";
+  allButton.className = "author-button";
+
+  allButton.classList.toggle(
+    "active", selectedAuthor === ""
+  );
+
+  allButton.onclick = () => selectAuthor("");
+
+  list.appendChild(allButton);
+
+  const query = normalizeSearch(searchText);
+
+  const filtered = names.filter(author =>
+    normalizeSearch(author.name).includes(query)
+  );
+
+  filtered.forEach(author => {
+    const row = document.createElement("div");
+
+    Object.assign(row.style, {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      padding: "7px 8px",
+      borderRadius: "5px",
+      flexShrink: "0",
+      background: selectedAuthor === author.name
+        ? "#f8eaea" : "transparent"
+    });
+
+    const iconBox = document.createElement(
+      author.profile ? "a" : "span"
+    );
+
+    Object.assign(iconBox.style, {
+      width: "32px",
+      height: "32px",
+      borderRadius: "50%",
+      overflow: "hidden",
+      flexShrink: "0",
+      background: "#e2ded8",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      textDecoration: "none"
+    });
+
+    if (author.profile) {
+      iconBox.href = author.profile;
+      iconBox.target = "_blank";
+      iconBox.rel = "noopener noreferrer";
+      iconBox.title = author.name + "のプロフィール";
+      iconBox.setAttribute(
+        "aria-label",
+        author.name + "のプロフィールを開く"
+      );
+    }
+
+    function showFallback() {
+      iconBox.replaceChildren();
+
+      const initial = document.createElement("span");
+
+      initial.textContent =
+        Array.from(author.name)[0] || "?";
+
+      initial.style.color = "#777777";
+      initial.style.fontSize = "14px";
+
+      iconBox.appendChild(initial);
+    }
+
+    if (author.icon) {
+      const img = document.createElement("img");
+
+      img.src = author.icon;
+      img.alt = author.name;
+      img.loading = "lazy";
+
+      Object.assign(img.style, {
+        width: "100%",
+        height: "100%",
+        objectFit: "cover"
+      });
+
+      img.onerror = showFallback;
+
+      iconBox.appendChild(img);
+
+    } else {
+      showFallback();
+    }
+
+    const button = document.createElement("button");
+
+    button.textContent = author.name;
+    button.className = "author-button";
+
+    Object.assign(button.style, {
+      flex: "1",
+      minWidth: "0",
+      padding: "5px 0",
+      background: "transparent",
+      color: selectedAuthor === author.name
+        ? "#b93636" : "#333333"
+    });
+
+    button.onclick = () => selectAuthor(author.name);
+
+    row.appendChild(iconBox);
+    row.appendChild(button);
+
+    list.appendChild(row);
+  });
+
+  if (filtered.length === 0) {
+    const message = document.createElement("p");
+
+    message.textContent = "該当する作者がいません。";
+    message.style.fontSize = "12px";
+    message.style.color = "#888888";
+
+    list.appendChild(message);
+  }
 }
 
 async function init() {
   const svg = document.getElementById("tree");
+
   if (!svg) return;
 
   try {
     const response = await fetch("works.json", {
       cache: "no-store"
     });
-    if (!response.ok) throw new Error("読み込み失敗");
+
+    if (!response.ok) {
+      throw new Error("読み込み失敗");
+    }
 
     works = await response.json();
 
     layout();
+    createSearch();
     renderAuthors();
     fitTree();
 
@@ -355,38 +580,58 @@ async function init() {
 
     svg.addEventListener("wheel", e => {
       e.preventDefault();
+
       const rect = svg.getBoundingClientRect();
+
       changeZoom(
         e.deltaY < 0 ? 1.12 : 1 / 1.12,
         e.clientX - rect.left,
         e.clientY - rect.top
       );
+
     }, { passive: false });
 
     let drag = null;
 
     svg.addEventListener("pointerdown", e => {
       if (e.target.closest("a")) return;
-      drag = { x: e.clientX, y: e.clientY };
+
+      drag = {
+        x: e.clientX,
+        y: e.clientY
+      };
+
       svg.setPointerCapture(e.pointerId);
     });
 
     svg.addEventListener("pointermove", e => {
       if (!drag) return;
+
       offsetX += e.clientX - drag.x;
       offsetY += e.clientY - drag.y;
-      drag = { x: e.clientX, y: e.clientY };
+
+      drag = {
+        x: e.clientX,
+        y: e.clientY
+      };
+
       render();
     });
 
-    svg.addEventListener("pointerup", () => drag = null);
-    svg.addEventListener("pointercancel", () => drag = null);
+    svg.addEventListener(
+      "pointerup", () => drag = null
+    );
+
+    svg.addEventListener(
+      "pointercancel", () => drag = null
+    );
 
     window.addEventListener("resize", fitTree);
 
   } catch (error) {
     document.getElementById("status").textContent =
       "作品データを読み込めませんでした。";
+
     console.error(error);
   }
 }
