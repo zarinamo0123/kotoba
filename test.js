@@ -1,7 +1,10 @@
-
 let works = [];
 let positions = new Map();
 let overlapping = new Set();
+let collapsed = new Set();
+let branchMap = new Map();
+let suppressClickUntil = 0;
+const CONTROL_HEIGHT = 24;
 
 let zoom = 1;
 let offsetX = 0;
@@ -199,7 +202,7 @@ function calculateLayout(layoutType) {
 
   const safeDistance = Math.hypot(
     CARD_WIDTH + GAP,
-    CARD_HEIGHT + GAP
+    CARD_HEIGHT + CONTROL_HEIGHT + GAP
   );
 
   let previousRadius = 0;
@@ -255,7 +258,7 @@ function calculateCompactLayout(levels, rootId) {
   const occupied = new Map();
 
   const cellWidth = CARD_WIDTH + GAP;
-  const cellHeight = CARD_HEIGHT + GAP;
+  const cellHeight = CARD_HEIGHT + CONTROL_HEIGHT + GAP;
 
   const workMap = new Map(
     works.map(w => [w.id, w])
@@ -432,7 +435,7 @@ function detectOverlaps() {
         Math.abs(a.x - b.x) < CARD_WIDTH;
 
       const vertical =
-        Math.abs(a.y - b.y) < CARD_HEIGHT;
+        Math.abs(a.y - b.y) < CARD_HEIGHT + CONTROL_HEIGHT;
 
       if (horizontal && vertical) {
         overlapping.add(idA);
@@ -462,7 +465,7 @@ function getBounds() {
 
   const maxY =
     Math.max(...points.map(p => p.y)) +
-    CARD_HEIGHT / 2;
+    CARD_HEIGHT / 2 + CONTROL_HEIGHT;
 
   return {
     minX,
@@ -506,6 +509,42 @@ function measureSize() {
   );
 }
 
+function visibleWorks() {
+  const visible = new Set();
+  const stack = works.filter(w => !w.parent).map(w => w.id);
+  while (stack.length) {
+    const id = stack.pop();
+    if (visible.has(id)) continue;
+    visible.add(id);
+    if (!collapsed.has(id)) stack.push(...(branchMap.get(id) || []));
+  }
+  return visible;
+}
+
+function branchControl(id) {
+  const closed = collapsed.has(id);
+  const g = svgElement("g", {role:"button", tabindex:0,
+    "aria-label": closed ? "つづきを開く" : "枝を折りたたむ",
+    "aria-expanded": String(!closed), "data-branch":id});
+  g.style.cursor = "pointer";
+  g.appendChild(svgElement("rect", {x:-44,y:32,width:88,height:32,rx:12,fill:"transparent"}));
+  g.appendChild(svgElement("rect", {x:closed?-36:-11,y:39,width:closed?72:22,height:22,rx:11,fill:"white",stroke:closed?"#b93636":"#c9c4bd"}));
+  const label = svgElement("text", {x:0,y:54,"text-anchor":"middle","font-size":12,fill:closed?"#b93636":"#888888","pointer-events":"none"});
+  label.textContent = closed ? "つづき ▾" : "▴";
+  g.appendChild(label);
+  function toggle(e) {
+    e.preventDefault(); e.stopPropagation();
+    if (e.type === "click" && Date.now() < suppressClickUntil) return;
+    if (collapsed.has(id)) collapsed.delete(id); else collapsed.add(id);
+    render();
+    document.getElementById("status").textContent = "表示中：" + visibleWorks().size + " / " + works.length + "（テスト用）";
+    if (e.type === "keydown") document.querySelector(`[data-branch="${id}"]`)?.focus();
+  }
+  g.addEventListener("click", toggle);
+  g.addEventListener("keydown", e => {if(e.key === "Enter" || e.key === " ") toggle(e);});
+  return g;
+}
+
 function render(measure = false) {
   const start = performance.now();
 
@@ -520,9 +559,10 @@ function render(measure = false) {
   });
 
   svg.appendChild(group);
+  const visible = visibleWorks();
 
   works.forEach(w => {
-    if (!w.parent) return;
+    if (!w.parent || !visible.has(w.id) || !visible.has(w.parent)) return;
 
     const a = positions.get(w.parent);
     const b = positions.get(w.id);
@@ -542,7 +582,7 @@ function render(measure = false) {
   works.forEach(w => {
     const p = positions.get(w.id);
 
-    if (!p) return;
+    if (!p || !visible.has(w.id)) return;
 
     const collision =
       showOverlap && overlapping.has(w.id);
@@ -605,6 +645,7 @@ function render(measure = false) {
 
     node.appendChild(tooltip);
 
+    if (branchMap.has(w.id)) node.appendChild(branchControl(w.id));
     group.appendChild(node);
   });
 
@@ -714,6 +755,13 @@ function runTest() {
     dataKey = key;
   }
 
+  collapsed.clear();
+  branchMap = new Map();
+  works.forEach(w => {
+    if (!w.parent) return;
+    if (!branchMap.has(w.parent)) branchMap.set(w.parent, []);
+    branchMap.get(w.parent).push(w.id);
+  });
   const start = performance.now();
 
   calculateLayout(layoutType);
@@ -761,105 +809,35 @@ function runTest() {
 
 function setupGestures(svg) {
   const pointers = new Map();
-
-  function point(e) {
-    const rect = svg.getBoundingClientRect();
-
-    return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
-    };
-  }
-
-  function distance(a, b) {
-    return Math.hypot(a.x - b.x, a.y - b.y);
-  }
-
-  function center(a, b) {
-    return {
-      x: (a.x + b.x) / 2,
-      y: (a.y + b.y) / 2
-    };
-  }
-
-  svg.addEventListener("wheel", e => {
-    e.preventDefault();
-
-    const p = point(e);
-
-    changeZoom(
-      e.deltaY < 0 ? 1.12 : 1 / 1.12,
-      p.x,
-      p.y
-    );
-  }, { passive: false });
-
-  svg.addEventListener("pointerdown", e => {
-    if (e.pointerType === "mouse" && e.button !== 0) {
-      return;
-    }
-
-    pointers.set(e.pointerId, point(e));
-
-    try {
-      svg.setPointerCapture(e.pointerId);
-    } catch {}
+  let moved = false;
+  function point(e) { const r=svg.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
+  function capture(id) { try { svg.setPointerCapture(id); } catch {} }
+  svg.addEventListener("wheel",e=>{e.preventDefault();const p=point(e);changeZoom(e.deltaY<0?1.12:1/1.12,p.x,p.y);},{passive:false});
+  svg.addEventListener("pointerdown",e=>{
+    if(e.pointerType==="mouse" && e.button!==0)return;
+    if(!pointers.size){moved=false;suppressClickUntil=0;}
+    const p=point(e);pointers.set(e.pointerId,{...p,startX:p.x,startY:p.y});
+    if(pointers.size>=2){moved=true;pointers.forEach((p,id)=>capture(id));}
   });
-
-  svg.addEventListener("pointermove", e => {
-    if (!pointers.has(e.pointerId)) return;
-
-    const before = [...pointers.values()];
-
-    const previous = pointers.get(e.pointerId);
-    const next = point(e);
-
-    pointers.set(e.pointerId, next);
-
-    const after = [...pointers.values()];
-
-    if (after.length === 1) {
-      offsetX += next.x - previous.x;
-      offsetY += next.y - previous.y;
-
-    } else if (after.length >= 2) {
-      const oldDistance =
-        distance(before[0], before[1]);
-
-      const newDistance =
-        distance(after[0], after[1]);
-
-      if (oldDistance < 1) return;
-
-      const oldCenter = center(before[0], before[1]);
-      const newCenter = center(after[0], after[1]);
-
-      const nextZoom = Math.max(
-        0.000001,
-        Math.min(4, zoom * newDistance / oldDistance)
-      );
-
-      const ratio = nextZoom / zoom;
-
-      offsetX =
-        newCenter.x - (oldCenter.x - offsetX) * ratio;
-
-      offsetY =
-        newCenter.y - (oldCenter.y - offsetY) * ratio;
-
-      zoom = nextZoom;
-    }
-
-    updateTransform();
+  svg.addEventListener("pointermove",e=>{
+    if(!pointers.has(e.pointerId))return;
+    const before=[...pointers.values()];const prev=pointers.get(e.pointerId),p=point(e);
+    pointers.set(e.pointerId,{...prev,...p});const after=[...pointers.values()];
+    if(after.length===1){
+      if(!moved){if(Math.hypot(p.x-prev.startX,p.y-prev.startY)<6)return;moved=true;capture(e.pointerId);offsetX+=p.x-prev.startX;offsetY+=p.y-prev.startY;}
+      else {offsetX+=p.x-prev.x;offsetY+=p.y-prev.y;}
+    }else{
+      moved=true;const d=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);const c=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});
+      const old=d(before[0],before[1]);if(old<1)return;
+      const a=c(before[0],before[1]),b=c(after[0],after[1]);
+      const next=Math.max(0.000001,Math.min(4,zoom*d(after[0],after[1])/old));
+      offsetX=b.x-(a.x-offsetX)*next/zoom;offsetY=b.y-(a.y-offsetY)*next/zoom;zoom=next;
+    }updateTransform();
   });
-
-  function endPointer(e) {
-    pointers.delete(e.pointerId);
-  }
-
-  svg.addEventListener("pointerup", endPointer);
-  svg.addEventListener("pointercancel", endPointer);
-  svg.addEventListener("lostpointercapture", endPointer);
+  function end(e){if(!pointers.has(e.pointerId))return;pointers.delete(e.pointerId);if(moved)suppressClickUntil=Date.now()+400;if(!pointers.size)moved=false;}
+  ["pointerup","pointercancel","lostpointercapture"].forEach(type=>svg.addEventListener(type,end));
+  window.addEventListener("pointerup",end);window.addEventListener("pointercancel",end);
+  svg.addEventListener("click",e=>{if(Date.now()<suppressClickUntil){e.preventDefault();e.stopPropagation();}},true);
 }
 
 function init() {
