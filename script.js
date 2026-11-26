@@ -1,15 +1,24 @@
 
 let works = [];
 let positions = new Map();
+
 let selectedAuthor = "";
 let searchText = "";
 let mode = "mine";
+
 let zoom = 1;
 let offsetX = 0;
 let offsetY = 0;
 
 const NS = "http://www.w3.org/2000/svg";
 const mobile = window.matchMedia("(max-width: 700px)");
+
+const CARD_WIDTH = 230;
+const CARD_HEIGHT = 80;
+const GAP = 20;
+
+let workMap = new Map();
+let childMap = new Map();
 
 function svgElement(tag, attrs = {}) {
   const el = document.createElementNS(NS, tag);
@@ -21,32 +30,56 @@ function svgElement(tag, attrs = {}) {
   return el;
 }
 
+function buildMaps() {
+  workMap = new Map();
+  childMap = new Map();
+
+  works.forEach(w => {
+    workMap.set(w.id, w);
+
+    if (w.verified !== true) return;
+
+    if (!childMap.has(w.parent)) {
+      childMap.set(w.parent, []);
+    }
+
+    childMap.get(w.parent).push(w);
+  });
+}
+
 function children(id) {
-  return works.filter(
-    w => w.parent === id && w.verified === true
-  );
+  return childMap.get(id) || [];
 }
 
 function descendants(id, found = new Set()) {
-  if (found.has(id)) return found;
+  const stack = [id];
 
-  found.add(id);
+  while (stack.length) {
+    const current = stack.pop();
 
-  children(id).forEach(w => descendants(w.id, found));
+    if (found.has(current)) continue;
+
+    found.add(current);
+
+    children(current).forEach(w => {
+      stack.push(w.id);
+    });
+  }
 
   return found;
 }
 
 function ancestors(id) {
   const found = new Set();
-  let work = works.find(w => w.id === id);
+
+  let work = workMap.get(id);
 
   while (work && !found.has(work.id)) {
     found.add(work.id);
 
     if (!work.verified) break;
 
-    work = works.find(w => w.id === work.parent);
+    work = workMap.get(work.parent);
   }
 
   return found;
@@ -55,33 +88,77 @@ function ancestors(id) {
 function layout() {
   positions.clear();
 
-  const root = works.find(w => !w.parent && w.verified);
+  const root = works.find(
+    w => !w.parent && w.verified === true
+  );
 
   if (!root) return;
 
+  const weights = new Map();
   const levels = new Map();
+  const visiting = new Set();
+
+  function getWeight(id) {
+    if (weights.has(id)) {
+      return weights.get(id);
+    }
+
+    if (visiting.has(id)) return 0;
+
+    visiting.add(id);
+
+    let weight = 1;
+
+    children(id).forEach(child => {
+      weight += getWeight(child.id);
+    });
+
+    visiting.delete(id);
+    weights.set(id, weight);
+
+    return weight;
+  }
+
+  getWeight(root.id);
 
   function place(work, depth, start, end) {
     if (positions.has(work.id)) return;
 
     const angle = (start + end) / 2;
 
-    positions.set(work.id, { depth, angle });
+    positions.set(work.id, {
+      depth,
+      angle,
+      x: 0,
+      y: 0
+    });
 
-    levels.set(depth, (levels.get(depth) || 0) + 1);
+    if (!levels.has(depth)) {
+      levels.set(depth, []);
+    }
+
+    levels.get(depth).push(work.id);
 
     const list = children(work.id);
 
-    const weights = list.map(w => descendants(w.id).size);
-
-    const total = weights.reduce((a, b) => a + b, 0);
+    const total = list.reduce(
+      (sum, child) => sum + getWeight(child.id),
+      0
+    );
 
     let cursor = start;
 
-    list.forEach((child, i) => {
-      const span = (end - start) * weights[i] / total;
+    list.forEach(child => {
+      const span =
+        (end - start) *
+        getWeight(child.id) / total;
 
-      place(child, depth + 1, cursor, cursor + span);
+      place(
+        child,
+        depth + 1,
+        cursor,
+        cursor + span
+      );
 
       cursor += span;
     });
@@ -89,30 +166,212 @@ function layout() {
 
   place(root, 0, -Math.PI / 2, Math.PI * 1.5);
 
-  const maxLevel = Math.max(...levels.keys());
+  calculateCompactLayout(levels, root.id);
+}
 
-  const pending = works.filter(w => !positions.has(w.id));
+function calculateCompactLayout(levels, rootId) {
+  const occupied = new Map();
 
-  pending.forEach((w, i) => {
-    positions.set(w.id, {
-      depth: maxLevel + 1,
-      angle: i * Math.PI * 2 / pending.length
+  const cellWidth = CARD_WIDTH + GAP;
+  const cellHeight = CARD_HEIGHT + GAP;
+
+  function cellKey(x, y) {
+    return (
+      Math.floor(x / cellWidth) + ":" +
+      Math.floor(y / cellHeight)
+    );
+  }
+
+  function isFree(x, y) {
+    const cx = Math.floor(x / cellWidth);
+    const cy = Math.floor(y / cellHeight);
+
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const key =
+          (cx + dx) + ":" + (cy + dy);
+
+        const nearby = occupied.get(key) || [];
+
+        for (const p of nearby) {
+          if (
+            Math.abs(x - p.x) < cellWidth &&
+            Math.abs(y - p.y) < cellHeight
+          ) {
+            return false;
+          }
+        }
+      }
+    }
+
+    return true;
+  }
+
+  function reserve(x, y) {
+    const key = cellKey(x, y);
+
+    if (!occupied.has(key)) {
+      occupied.set(key, []);
+    }
+
+    occupied.get(key).push({ x, y });
+  }
+
+  const root = positions.get(rootId);
+
+  root.x = 0;
+  root.y = 0;
+
+  reserve(0, 0);
+
+  const sortedLevels = [...levels.entries()]
+    .sort((a, b) => a[0] - b[0]);
+
+  sortedLevels.forEach(([depth, ids]) => {
+    if (depth === 0) return;
+
+    ids.sort((a, b) =>
+      positions.get(a).angle -
+      positions.get(b).angle
+    );
+
+    ids.forEach(id => {
+      const p = positions.get(id);
+      const work = workMap.get(id);
+      const parent = positions.get(work.parent);
+
+      if (!parent) return;
+
+      const preferredAngle = p.angle;
+
+      const parentRadius = Math.hypot(
+        parent.x,
+        parent.y
+      );
+
+      let best = null;
+      let bestScore = Infinity;
+
+      for (let ring = 1; ring <= 24; ring++) {
+        const radius = ring * 125;
+
+        const samples = Math.max(
+          12,
+          Math.ceil(2 * Math.PI * radius / 70)
+        );
+
+        for (let i = 0; i < samples; i++) {
+          const angle =
+            preferredAngle +
+            i * Math.PI * 2 / samples;
+
+          const x =
+            parent.x + Math.cos(angle) * radius;
+
+          const y =
+            parent.y + Math.sin(angle) * radius;
+
+          if (!isFree(x, y)) continue;
+
+          const globalRadius = Math.hypot(x, y);
+
+          if (globalRadius < parentRadius + 40) {
+            continue;
+          }
+
+          const angleDifference = Math.abs(
+            Math.atan2(
+              Math.sin(angle - preferredAngle),
+              Math.cos(angle - preferredAngle)
+            )
+          );
+
+          const score =
+            radius +
+            globalRadius * 0.15 +
+            angleDifference * 90;
+
+          if (score < bestScore) {
+            bestScore = score;
+            best = { x, y };
+          }
+        }
+
+        if (
+          best &&
+          (ring + 1) * 125 >= bestScore
+        ) {
+          break;
+        }
+      }
+
+      if (!best) {
+        let radius = Math.max(
+          parentRadius + 270,
+          depth * 260
+        );
+
+        while (!best) {
+          const x =
+            Math.cos(preferredAngle) * radius;
+
+          const y =
+            Math.sin(preferredAngle) * radius;
+
+          if (isFree(x, y)) {
+            best = { x, y };
+          } else {
+            radius += 270;
+          }
+        }
+      }
+
+      p.x = best.x;
+      p.y = best.y;
+
+      reserve(p.x, p.y);
     });
   });
 
-  const step = Math.max(
-    260,
-    ...Array.from(levels.entries()).map(([d, n]) =>
-      d > 0 ? n * 280 / (2 * Math.PI * d) : 0
-    ),
-    pending.length * 280 /
-      (2 * Math.PI * (maxLevel + 1))
+  // 系譜につながっていない作品は外側に配置
+  const pending = works.filter(
+    w => !positions.has(w.id)
   );
 
-  positions.forEach(p => {
-    p.x = Math.cos(p.angle) * p.depth * step;
-    p.y = Math.sin(p.angle) * p.depth * step;
-  });
+  if (pending.length) {
+    const existing = [...positions.values()];
+
+    const maxRadius = Math.max(
+      0,
+      ...existing.map(p => Math.hypot(p.x, p.y))
+    );
+
+    pending.forEach((w, i) => {
+      const angle =
+        i * Math.PI * 2 / pending.length;
+
+      let radius = maxRadius + 300;
+
+      while (true) {
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius;
+
+        if (isFree(x, y)) {
+          positions.set(w.id, {
+            depth: -1,
+            angle,
+            x,
+            y
+          });
+
+          reserve(x, y);
+          break;
+        }
+
+        radius += 270;
+      }
+    });
+  }
 }
 
 function highlighted() {
@@ -122,16 +381,21 @@ function highlighted() {
 
   const result = new Set();
 
-  works.filter(w => w.author === selectedAuthor)
+  works
+    .filter(w => w.author === selectedAuthor)
     .forEach(w => {
       result.add(w.id);
 
       if (mode === "journey") {
-        descendants(w.id).forEach(id => result.add(id));
+        descendants(w.id).forEach(id => {
+          result.add(id);
+        });
       }
 
       if (mode === "roots") {
-        ancestors(w.id).forEach(id => result.add(id));
+        ancestors(w.id).forEach(id => {
+          result.add(id);
+        });
       }
     });
 
@@ -146,6 +410,7 @@ function render() {
   svg.replaceChildren();
 
   const group = svgElement("g", {
+    id: "tree-content",
     transform:
       `translate(${offsetX} ${offsetY}) scale(${zoom})`
   });
@@ -154,6 +419,7 @@ function render() {
 
   const active = highlighted();
 
+  // 作品同士を結ぶ線
   works.forEach(w => {
     if (!w.parent || !w.verified) return;
 
@@ -163,7 +429,8 @@ function render() {
     if (!a || !b) return;
 
     const focused =
-      active.has(w.id) && active.has(w.parent);
+      active.has(w.id) &&
+      active.has(w.parent);
 
     group.appendChild(svgElement("line", {
       x1: a.x,
@@ -179,6 +446,7 @@ function render() {
     }));
   });
 
+  // 作品カード
   works.forEach(w => {
     const p = positions.get(w.id);
 
@@ -192,10 +460,10 @@ function render() {
     });
 
     const rect = svgElement("rect", {
-      x: -115,
-      y: -40,
-      width: 230,
-      height: 80,
+      x: -CARD_WIDTH / 2,
+      y: -CARD_HEIGHT / 2,
+      width: CARD_WIDTH,
+      height: CARD_HEIGHT,
       rx: 8,
       fill: "#ffffff",
       stroke: own ? "#b93636" : "#c9c4bd",
@@ -213,13 +481,18 @@ function render() {
 
     const chars = Array.from(w.title);
 
-    for (let i = 0; i < chars.length && i < 45; i += 15) {
+    for (
+      let i = 0;
+      i < chars.length && i < 45;
+      i += 15
+    ) {
       const line = svgElement("tspan", {
         x: 0,
         y: -22 + (i / 15) * 15
       });
 
-      line.textContent = chars.slice(i, i + 15).join("");
+      line.textContent =
+        chars.slice(i, i + 15).join("");
 
       if (i === 30 && chars.length > 45) {
         line.textContent =
@@ -230,7 +503,9 @@ function render() {
     }
 
     const tooltip = svgElement("title");
+
     tooltip.textContent = w.title;
+
     node.appendChild(tooltip);
 
     if (w.url) {
@@ -306,17 +581,39 @@ function render() {
   });
 }
 
+// 拡大・縮小・移動時は座標変換だけを更新
+function updateTransform() {
+  const group =
+    document.getElementById("tree-content");
+
+  if (!group) return;
+
+  group.setAttribute(
+    "transform",
+    `translate(${offsetX} ${offsetY}) scale(${zoom})`
+  );
+}
+
 function fitTree() {
   const svg = document.getElementById("tree");
 
   if (!svg || !positions.size) return;
 
+  if (!svg.clientWidth || !svg.clientHeight) return;
+
   const points = [...positions.values()];
 
-  const minX = Math.min(...points.map(p => p.x)) - 140;
-  const maxX = Math.max(...points.map(p => p.x)) + 140;
-  const minY = Math.min(...points.map(p => p.y)) - 65;
-  const maxY = Math.max(...points.map(p => p.y)) + 65;
+  const minX =
+    Math.min(...points.map(p => p.x)) - 140;
+
+  const maxX =
+    Math.max(...points.map(p => p.x)) + 140;
+
+  const minY =
+    Math.min(...points.map(p => p.y)) - 65;
+
+  const maxY =
+    Math.max(...points.map(p => p.y)) + 65;
 
   zoom = Math.min(
     svg.clientWidth / (maxX - minX),
@@ -325,12 +622,14 @@ function fitTree() {
   );
 
   offsetX =
-    svg.clientWidth / 2 - (minX + maxX) / 2 * zoom;
+    svg.clientWidth / 2 -
+    (minX + maxX) / 2 * zoom;
 
   offsetY =
-    svg.clientHeight / 2 - (minY + maxY) / 2 * zoom;
+    svg.clientHeight / 2 -
+    (minY + maxY) / 2 * zoom;
 
-  render();
+  updateTransform();
 }
 
 function changeZoom(factor, x, y) {
@@ -340,7 +639,7 @@ function changeZoom(factor, x, y) {
   y = y ?? svg.clientHeight / 2;
 
   const next = Math.max(
-    0.05,
+    0.000001,
     Math.min(4, zoom * factor)
   );
 
@@ -349,30 +648,38 @@ function changeZoom(factor, x, y) {
 
   zoom = next;
 
-  render();
+  updateTransform();
 }
 
 function setSidebarCollapsed(collapsed) {
-  const sidebar = document.querySelector(".sidebar");
-  const button = document.querySelector(".sidebar-toggle");
+  const sidebar =
+    document.querySelector(".sidebar");
+
+  const button =
+    document.querySelector(".sidebar-toggle");
 
   if (!sidebar || !button) return;
 
-  sidebar.classList.toggle("is-collapsed", collapsed);
+  sidebar.classList.toggle(
+    "is-collapsed",
+    collapsed
+  );
 
   button.setAttribute(
     "aria-expanded",
     String(!collapsed)
   );
 
-  const label = selectedAuthor || "参加者を選ぶ・探す";
+  const label =
+    selectedAuthor || "参加者を選ぶ・探す";
 
   button.textContent =
     label + (collapsed ? "　▼" : "　▲");
 }
 
 function createSidebarToggle() {
-  const sidebar = document.querySelector(".sidebar");
+  const sidebar =
+    document.querySelector(".sidebar");
 
   if (!sidebar) return;
 
@@ -380,13 +687,15 @@ function createSidebarToggle() {
 
   button.className = "sidebar-toggle";
   button.type = "button";
+
   button.setAttribute("aria-controls", "authors");
 
   const controls = document.createElement("div");
 
   controls.className = "sidebar-controls";
 
-  const allWorksButton = document.createElement("button");
+  const allWorksButton =
+    document.createElement("button");
 
   allWorksButton.className = "all-works-button";
   allWorksButton.type = "button";
@@ -418,7 +727,9 @@ function createSidebarToggle() {
 function createSearch() {
   const list = document.getElementById("authors");
 
-  if (document.getElementById("author-search")) return;
+  if (document.getElementById("author-search")) {
+    return;
+  }
 
   const input = document.createElement("input");
 
@@ -426,7 +737,10 @@ function createSearch() {
   input.type = "search";
   input.placeholder = "作者名で検索";
 
-  input.setAttribute("aria-label", "作者名で検索");
+  input.setAttribute(
+    "aria-label",
+    "作者名で検索"
+  );
 
   Object.assign(input.style, {
     width: "100%",
@@ -460,7 +774,8 @@ function selectAuthor(name) {
 }
 
 function normalizeSearch(value) {
-  return value.normalize("NFKC")
+  return value
+    .normalize("NFKC")
     .toLocaleLowerCase("ja")
     .trim();
 }
@@ -482,7 +797,9 @@ function renderAuthors() {
     } else {
       const data = authors.get(w.author);
 
-      if (!data.icon && w.icon) data.icon = w.icon;
+      if (!data.icon && w.icon) {
+        data.icon = w.icon;
+      }
 
       if (!data.profile && w.profile) {
         data.profile = w.profile;
@@ -494,9 +811,11 @@ function renderAuthors() {
     (a, b) => a.name.localeCompare(b.name, "ja")
   );
 
-  const allButton = document.createElement("button");
+  const allButton =
+    document.createElement("button");
 
   allButton.textContent = "すべての作品";
+
   allButton.className =
     "author-button all-works-list-button";
 
@@ -567,7 +886,9 @@ function renderAuthors() {
       iconBox.href = author.profile;
       iconBox.target = "_blank";
       iconBox.rel = "noopener noreferrer";
-      iconBox.title = author.name + "のプロフィール";
+
+      iconBox.title =
+        author.name + "のプロフィール";
 
       iconBox.setAttribute(
         "aria-label",
@@ -578,7 +899,8 @@ function renderAuthors() {
     function showFallback() {
       iconBox.replaceChildren();
 
-      const initial = document.createElement("span");
+      const initial =
+        document.createElement("span");
 
       initial.textContent =
         Array.from(author.name)[0] || "?";
@@ -609,7 +931,8 @@ function renderAuthors() {
       showFallback();
     }
 
-    const button = document.createElement("button");
+    const button =
+      document.createElement("button");
 
     button.textContent = author.name;
     button.className = "author-button";
@@ -625,17 +948,22 @@ function renderAuthors() {
           : "#333333"
     });
 
-    button.onclick = () => selectAuthor(author.name);
+    button.onclick = () => {
+      selectAuthor(author.name);
+    };
 
     row.appendChild(iconBox);
     row.appendChild(button);
+
     list.appendChild(row);
   });
 
   if (filtered.length === 0) {
     const message = document.createElement("p");
 
-    message.textContent = "該当する作者がいません。";
+    message.textContent =
+      "該当する作者がいません。";
+
     message.style.fontSize = "12px";
     message.style.color = "#888888";
 
@@ -682,7 +1010,10 @@ function setupGestures(svg) {
   }, { passive: false });
 
   svg.addEventListener("pointerdown", e => {
-    if (e.pointerType === "mouse" && e.button !== 0) {
+    if (
+      e.pointerType === "mouse" &&
+      e.button !== 0
+    ) {
       return;
     }
 
@@ -748,35 +1079,46 @@ function setupGestures(svg) {
         offsetY += next.y - previous.y;
       }
 
-      render();
+      updateTransform();
 
     } else if (after.length >= 2) {
       moved = true;
 
-      const oldDistance = distance(before[0], before[1]);
-      const newDistance = distance(after[0], after[1]);
+      const oldDistance =
+        distance(before[0], before[1]);
+
+      const newDistance =
+        distance(after[0], after[1]);
 
       if (oldDistance < 1) return;
 
-      const oldCenter = center(before[0], before[1]);
-      const newCenter = center(after[0], after[1]);
+      const oldCenter =
+        center(before[0], before[1]);
+
+      const newCenter =
+        center(after[0], after[1]);
 
       const nextZoom = Math.max(
-        0.05,
-        Math.min(4, zoom * newDistance / oldDistance)
+        0.000001,
+        Math.min(
+          4,
+          zoom * newDistance / oldDistance
+        )
       );
 
       const ratio = nextZoom / zoom;
 
       offsetX =
-        newCenter.x - (oldCenter.x - offsetX) * ratio;
+        newCenter.x -
+        (oldCenter.x - offsetX) * ratio;
 
       offsetY =
-        newCenter.y - (oldCenter.y - offsetY) * ratio;
+        newCenter.y -
+        (oldCenter.y - offsetY) * ratio;
 
       zoom = nextZoom;
 
-      render();
+      updateTransform();
     }
   });
 
@@ -796,10 +1138,18 @@ function setupGestures(svg) {
 
   svg.addEventListener("pointerup", endPointer);
   svg.addEventListener("pointercancel", endPointer);
-  svg.addEventListener("lostpointercapture", endPointer);
+
+  svg.addEventListener(
+    "lostpointercapture",
+    endPointer
+  );
 
   window.addEventListener("pointerup", endPointer);
-  window.addEventListener("pointercancel", endPointer);
+
+  window.addEventListener(
+    "pointercancel",
+    endPointer
+  );
 
   svg.addEventListener("click", e => {
     if (Date.now() < suppressClickUntil) {
@@ -815,9 +1165,10 @@ async function init() {
   if (!svg) return;
 
   try {
-    const response = await fetch("works.json", {
-      cache: "no-store"
-    });
+    const response = await fetch(
+      "works.json",
+      { cache: "no-store" }
+    );
 
     if (!response.ok) {
       throw new Error("読み込み失敗");
@@ -825,10 +1176,18 @@ async function init() {
 
     works = await response.json();
 
+    buildMaps();
     layout();
+
+    if (works.length && !positions.size) {
+      throw new Error("起点作品が見つかりません");
+    }
+
     createSearch();
     createSidebarToggle();
     renderAuthors();
+
+    render();
     fitTree();
 
     document.getElementById("zoom-in").onclick =
@@ -837,12 +1196,14 @@ async function init() {
     document.getElementById("zoom-out").onclick =
       () => changeZoom(1 / 1.2);
 
-    document.getElementById("reset").onclick = fitTree;
+    document.getElementById("reset").onclick =
+      fitTree;
 
-    document.getElementById("mode").onchange = e => {
-      mode = e.target.value;
-      render();
-    };
+    document.getElementById("mode").onchange =
+      e => {
+        mode = e.target.value;
+        render();
+      };
 
     setupGestures(svg);
 
@@ -856,6 +1217,7 @@ async function init() {
       ) {
         lastWidth = svg.clientWidth;
         lastHeight = svg.clientHeight;
+
         fitTree();
       }
     });
