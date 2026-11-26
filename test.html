@@ -56,6 +56,13 @@
       border-radius: 5px;
       font-size: 12px;
       line-height: 2;
+      overflow-wrap: anywhere;
+    }
+
+    .test-results h3 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      font-weight: 600;
     }
 
     .test-results p {
@@ -63,7 +70,13 @@
     }
 
     .test-results strong {
-      font-size: 16px;
+      font-size: 15px;
+    }
+
+    .test-results hr {
+      border: 0;
+      border-top: 1px solid #e2ded8;
+      margin: 12px 0;
     }
 
     .result-good {
@@ -72,6 +85,12 @@
 
     .result-bad {
       color: #b93636;
+    }
+
+    .test-note {
+      font-size: 11px;
+      line-height: 1.7;
+      color: #888;
     }
 
     @media (max-width: 700px) {
@@ -85,7 +104,7 @@
     }
   </style>
 
-  <script src="test.js?v=1" defer></script>
+  <script src="test.js?v=2" defer></script>
 </head>
 
 <body>
@@ -131,6 +150,7 @@
         <select id="layout-type">
           <option value="original">現在の配置方法</option>
           <option value="improved">重なり防止版</option>
+          <option value="compact">コンパクト配置版</option>
         </select>
 
         <button id="generate" class="primary">
@@ -144,6 +164,8 @@
       </div>
 
       <div class="test-results">
+
+        <h3>重なりの検証</h3>
 
         <p>
           作品数：
@@ -164,6 +186,47 @@
           最大世代：
           <strong id="result-depth">--</strong>
         </p>
+
+        <hr>
+
+        <h3>コンパクトさの検証</h3>
+
+        <p>
+          横幅：
+          <strong id="result-width">--</strong>
+        </p>
+
+        <p>
+          縦幅：
+          <strong id="result-height">--</strong>
+        </p>
+
+        <p>
+          全体面積：
+          <strong id="result-area">--</strong>
+        </p>
+
+        <p>
+          カード占有率：
+          <strong id="result-density">--</strong>
+        </p>
+
+        <p>
+          全体表示時の拡大率：
+          <strong id="result-fit-zoom">--</strong>
+        </p>
+
+        <p class="test-note">
+          全体面積は、すべてのカードを囲む
+          長方形の面積です。
+          カード占有率は、その面積に対する
+          カードの合計面積の割合です。
+          重なりがある場合は参考値となります。
+        </p>
+
+        <hr>
+
+        <h3>処理速度の検証</h3>
 
         <p>
           配置計算時間：
