@@ -87,7 +87,7 @@ function ancestors(id) {
   return found;
 }
 
-function layout() {
+function layout(pinned = new Map()) {
   positions.clear();
 
   const root = works.find(
@@ -168,10 +168,10 @@ function layout() {
 
   place(root, 0, -Math.PI / 2, Math.PI * 1.5);
 
-  calculateCompactLayout(levels, root.id);
+  calculateCompactLayout(levels, root.id, pinned);
 }
 
-function calculateCompactLayout(levels, rootId) {
+function calculateCompactLayout(levels, rootId, pinned = new Map()) {
   const occupied = new Map();
 
   const cellWidth = CARD_WIDTH + GAP;
@@ -226,6 +226,18 @@ function calculateCompactLayout(levels, rootId) {
 
   reserve(0, 0);
 
+  // 自動更新では既存カードを固定して、新着だけを配置する。
+  const fixed = new Set([rootId]);
+  pinned.forEach((old, id) => {
+    if (id === rootId || !workMap.has(id)) return;
+    if (!Number.isFinite(old.x) || !Number.isFinite(old.y)) return;
+    if (!isFree(old.x, old.y)) return;
+    const current = positions.get(id);
+    positions.set(id, { ...(current || old), x: old.x, y: old.y });
+    reserve(old.x, old.y);
+    fixed.add(id);
+  });
+
   const sortedLevels = [...levels.entries()]
     .sort((a, b) => a[0] - b[0]);
 
@@ -238,6 +250,7 @@ function calculateCompactLayout(levels, rootId) {
     );
 
     ids.forEach(id => {
+      if (fixed.has(id)) return;
       const p = positions.get(id);
       const work = workMap.get(id);
       const parent = positions.get(work.parent);
@@ -1270,6 +1283,176 @@ function setupGestures(svg) {
   }, true);
 }
 
+// --- アプリに戻ったときの新着確認 ---
+const REFRESH_INTERVAL = 30_000;
+const REFRESH_IDLE = 1_200;
+let refreshBusy = false;
+let pendingWorks = null;
+let refreshTimer = null;
+let lastRefresh = 0;
+let lastInteraction = 0;
+let preserveViewUntil = 0;
+const activePointers = new Set();
+
+function validWorks(data) {
+  if (!Array.isArray(data) || !data.length) return false;
+  const ids = new Set();
+  for (const w of data) {
+    if (!w || typeof w.id !== "string" || !w.id || ids.has(w.id) ||
+        typeof w.title !== "string" || typeof w.author !== "string") return false;
+    ids.add(w.id);
+  }
+  return data.some(w => !w.parent && w.verified === true);
+}
+
+function worksSignature(data) {
+  return JSON.stringify(data.map(w => [w.id, w.title, w.author, w.url,
+    w.profile, w.icon, w.parent || "", w.verified]).sort((a, b) =>
+      a[0].localeCompare(b[0])));
+}
+
+function scheduleWorksApply() {
+  clearTimeout(refreshTimer);
+  if (!pendingWorks || document.hidden) return;
+  refreshTimer = setTimeout(applyPendingWorks, REFRESH_IDLE);
+}
+
+function applyPendingWorks() {
+  if (!pendingWorks || document.hidden) return;
+  const focused = document.activeElement;
+  // ドラッグ中や入力中は画面を作り直さない。
+  if (activePointers.size || Date.now() - lastInteraction < REFRESH_IDLE ||
+      focused?.matches("input, select, textarea, [contenteditable='true']")) {
+    // 次の操作終了・フォーカス解除・復帰を待つ。
+    if (!activePointers.size && !focused?.matches("input, select, textarea, [contenteditable='true']")) {
+      scheduleWorksApply();
+    }
+    return;
+  }
+  const next = pendingWorks;
+  pendingWorks = null;
+  if (worksSignature(next) === worksSignature(works)) return;
+
+  // 一時的に古い配信データが返っても、表示済み作品は消さない。
+  // 削除を伴う管理上の変更は次回の通常起動で読み込む。
+  const nextIds = new Set(next.map(w => w.id));
+  if (works.some(w => !nextIds.has(w.id))) return;
+  if (next.find(w => !w.parent && w.verified === true)?.id !==
+      works.find(w => !w.parent && w.verified === true)?.id) return;
+
+  const previous = works;
+  const oldPositions = new Map(positions);
+  const oldAuthorPoints = new Map(authorPoints);
+  const oldAuthorEdges = authorEdges;
+  const oldWorkMap = workMap, oldChildMap = childMap;
+  const oldSelectedAuthor = selectedAuthor, oldSelectedWork = selectedWork;
+  const oldChosenEdge = chosenEdge, oldCollapsed = new Set(collapsed);
+  const scroll = document.getElementById("authors").scrollTop;
+  const detail = document.getElementById("author-details");
+  const detailScroll = detail?.scrollTop || 0;
+  const detailWasOpen = detail && !detail.hidden;
+  const oldZoom = zoom, oldX = offsetX, oldY = offsetY;
+
+  // 更新に伴う微小な高さの変化で自動フィットしない。
+  preserveViewUntil = Date.now() + 800;
+  try {
+    works = next;
+    buildMaps();
+    layout(oldPositions);
+    if (!positions.size) throw new Error("新着の配置に失敗");
+    buildAuthorGraph(oldAuthorPoints);
+    if (selectedAuthor && !works.some(w => w.author === selectedAuthor)) {
+      selectedAuthor = "";
+      selectedWork = "";
+    }
+    if (selectedWork && workMap.get(selectedWork)?.author !== selectedAuthor) selectedWork = "";
+    if (!authorView) revealSelection();
+    renderAuthors();
+    syncFocusControls();
+    setSidebarCollapsed(document.querySelector(".sidebar").classList.contains("is-collapsed"));
+    if (detailWasOpen) {
+      const edge = authorEdges.get(chosenEdge);
+      if (!edge) chosenEdge = "";
+      authorDetails(edge || null);
+      detail.scrollTop = detailScroll;
+    }
+    zoom = oldZoom; offsetX = oldX; offsetY = oldY;
+    render();
+    document.getElementById("authors").scrollTop = scroll;
+    updateTransform();
+  } catch (error) {
+    // 新着の処理に失敗しても直前の表示に戻す。
+    works = previous; positions = oldPositions;
+    workMap = oldWorkMap; childMap = oldChildMap;
+    authorPoints = oldAuthorPoints; authorEdges = oldAuthorEdges;
+    selectedAuthor = oldSelectedAuthor; selectedWork = oldSelectedWork;
+    chosenEdge = oldChosenEdge;
+    collapsed.clear(); oldCollapsed.forEach(id => collapsed.add(id));
+    zoom = oldZoom; offsetX = oldX; offsetY = oldY;
+    renderAuthors(); syncFocusControls(); render();
+    if (detailWasOpen) authorDetails(authorEdges.get(chosenEdge) || null);
+    document.getElementById("authors").scrollTop = scroll;
+    console.warn("新着の反映を見送りました", error);
+  }
+}
+
+async function checkWorksRefresh(force = false) {
+  if (document.hidden || refreshBusy || navigator.onLine === false) return;
+  if (!force && Date.now() - lastRefresh < REFRESH_INTERVAL) return;
+  refreshBusy = true;
+  lastRefresh = Date.now();
+  try {
+    const response = await fetch("works.json", { cache: "no-store" });
+    if (!response.ok) return;
+    const next = await response.json();
+    if (!validWorks(next)) return;
+    if (worksSignature(next) !== worksSignature(works)) {
+      pendingWorks = next;
+      scheduleWorksApply();
+    } else {
+      pendingWorks = null;
+      clearTimeout(refreshTimer);
+    }
+  } catch (error) {
+    // オフラインでも閲覧を止めない。
+    console.debug("新着確認を見送りました", error);
+  } finally {
+    refreshBusy = false;
+  }
+}
+
+function startWorksRefresh() {
+  lastRefresh = Date.now();
+  const interact = () => {
+    lastInteraction = Date.now();
+    if (pendingWorks && !activePointers.size) scheduleWorksApply();
+  };
+  window.addEventListener("pointerdown", e => {
+    activePointers.add(e.pointerId); interact();
+  }, true);
+  const end = e => { activePointers.delete(e.pointerId); interact(); };
+  window.addEventListener("pointerup", end, true);
+  window.addEventListener("pointercancel", end, true);
+  for (const type of ["wheel", "keydown", "input", "change", "scroll", "focusout"]) {
+    window.addEventListener(type, interact, { capture: true, passive: true });
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      clearTimeout(refreshTimer);
+      activePointers.clear();
+      return;
+    }
+    scheduleWorksApply();
+    checkWorksRefresh(true);
+  });
+  window.addEventListener("pageshow", e => {
+    if (e.persisted) checkWorksRefresh(true);
+  });
+  window.addEventListener("online", () => checkWorksRefresh(true));
+  // 開いたままでも、操作を妨げずにたまに新着を確認する。
+  setInterval(() => checkWorksRefresh(), 120_000);
+}
+
 async function init() {
   const svg = document.getElementById("tree");
 
@@ -1285,7 +1468,9 @@ async function init() {
       throw new Error("読み込み失敗");
     }
 
-    works = await response.json();
+    const initial = await response.json();
+    if (!validWorks(initial)) throw new Error("作品データの形式が不正です");
+    works = initial;
 
     buildMaps();
     layout();
@@ -1333,11 +1518,12 @@ async function init() {
         lastWidth = svg.clientWidth;
         lastHeight = svg.clientHeight;
 
-        fitTree();
+        if (Date.now() >= preserveViewUntil) fitTree();
       }
     });
 
     observer.observe(svg);
+    startWorksRefresh();
 
   } catch (error) {
     document.getElementById("status").textContent =
@@ -1352,7 +1538,7 @@ let authorView = false;
 let chosenEdge = "";
 let authorPoints = new Map();
 let authorEdges = new Map();
-function buildAuthorGraph() {
+function buildAuthorGraph(pinned = new Map()) {
   const names = [...new Set(works.map(w => w.author))].sort((a,b)=>a.localeCompare(b,"ja",{numeric:true}));
   const byId = new Map(works.map(w=>[w.id,w]));
   authorPoints = new Map(); authorEdges = new Map();
@@ -1363,11 +1549,51 @@ function buildAuthorGraph() {
     if(!authorEdges.has(key))authorEdges.set(key,{a:pair[0],b:pair[1],links:[]});
     authorEdges.get(key).links.push({parent,child:w});
   });
-  layoutAuthors(names);
+  layoutAuthors(names, pinned);
 }
-function layoutAuthors(names) {
+function layoutAuthors(names, pinned = new Map()) {
   const n=names.length;
   if(!n)return;
+
+  // 既存の作者は動かさない。新しい作者はつながりの近くに置く。
+  if (pinned.size) {
+    const placed = [];
+    const fixed = new Set();
+    const free = (x, y) => placed.every(p =>
+      Math.abs(p.x - x) >= 170 || Math.abs(p.y - y) >= 100);
+    for (const name of names) {
+      const old = pinned.get(name);
+      if (!old || !free(old.x, old.y)) continue;
+      const p = { x: old.x, y: old.y };
+      authorPoints.set(name, p);
+      placed.push(p);
+      fixed.add(name);
+    }
+    for (const name of names) {
+      if (fixed.has(name)) continue;
+      const linked = [];
+      authorEdges.forEach(e => {
+        const other = e.a === name ? e.b : e.b === name ? e.a : null;
+        if (other !== null && authorPoints.has(other)) linked.push(authorPoints.get(other));
+      });
+      const center = linked.length ? {
+        x: linked.reduce((sum, p) => sum + p.x, 0) / linked.length,
+        y: linked.reduce((sum, p) => sum + p.y, 0) / linked.length
+      } : { x: 0, y: 0 };
+      let found;
+      for (let ring = 1; !found; ring++) {
+        for (let k = 0; k < ring * 16; k++) {
+          const angle = k * Math.PI * 2 / (ring * 16);
+          const x = center.x + Math.cos(angle) * ring * 100;
+          const y = center.y + Math.sin(angle) * ring * 100;
+          if (free(x, y)) { found = { x, y }; break; }
+        }
+      }
+      authorPoints.set(name, found);
+      placed.push(found);
+    }
+    return;
+  }
   let seed=20261126; const random=()=>((seed=(seed*1664525+1013904223)>>>0)/4294967296);
   const radius=Math.sqrt(n)*95;
   const nodes=names.map((name,i)=>{
