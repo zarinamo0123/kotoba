@@ -55,6 +55,24 @@ jobs:
               r'https://note\.com/([A-Za-z0-9_-]+)/n/(n[0-9a-f]+)'
           )
 
+          # 除外リストを読み込む。不正な形式なら処理を中止する。
+          with open("excluded.json", encoding="utf-8") as f:
+              excluded_urls = json.load(f)
+
+          if not isinstance(excluded_urls, list):
+              raise ValueError("excluded.json はURLの配列にしてください")
+
+          excluded = set()
+          for url in excluded_urls:
+              if not isinstance(url, str):
+                  raise ValueError("除外URLは文字列にしてください")
+              match = pattern.fullmatch(url.strip().rstrip("/"))
+              if not match:
+                  raise ValueError(f"不正な除外URL: {url}")
+              excluded.add(match.group(2))
+
+          print(f"除外設定: {len(excluded)}作品")
+
           registered = {}
 
           for work in works:
@@ -205,10 +223,17 @@ jobs:
               cache[url] = result
               return result
 
+          for article_id, url in magazine.items():
+              if article_id in excluded:
+                  print(f"掲載対象外: {url}")
+
+          for article_id in excluded.intersection(registered):
+              print(f"注意: 登録済み作品は自動削除しません: {registered[article_id]['url']}")
+
           pending = {
               key: url
               for key, url in magazine.items()
-              if key not in registered
+              if key not in registered and key not in excluded
           }
 
           print(f"未登録候補: {len(pending)}作品")
@@ -235,9 +260,10 @@ jobs:
                       candidates = sorted(
                           candidate
                           for candidate in page["candidates"]
-                          if candidate in registered
-                          or candidate in magazine
-                          or candidate in hashtag
+                          if candidate not in excluded
+                          and (candidate in registered
+                               or candidate in magazine
+                               or candidate in hashtag)
                       )
 
                       matches = []
