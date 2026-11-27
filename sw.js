@@ -1,120 +1,127 @@
 
-const CACHE_NAME = "kotoba-v1";
+const CACHE_NAME = "kotoba-v2";
 const CACHE_PREFIX = "kotoba-";
-
 const BASE = new URL(self.registration.scope);
 
 const APP_FILES = [
-  "./",
-  "./index.html",
-  "./style.css",
-  "./design.css",
-  "./script.js",
-  "./works.json",
-  "./manifest.json"
+  "index.html",
+  "style.css",
+  "design.css",
+  "script.js",
+  "install.js",
+  "works.json",
+  "manifest.json",
+  "icons/icon-192.png",
+  "icons/icon-512.png"
 ];
 
-// 初回インストール
+const APP_PATHS = new Set(
+  APP_FILES.map(file => new URL(file, BASE).pathname)
+);
+
+function cacheKey(url) {
+  const key = new URL(url);
+
+  key.search = "";
+  key.hash = "";
+
+  if (key.pathname === BASE.pathname) {
+    return new URL("index.html", BASE).href;
+  }
+
+  return key.href;
+}
+
 self.addEventListener("install", event => {
-  event.waitUntil(
-    (async () => {
-      const cache = await caches.open(CACHE_NAME);
+  event.waitUntil((async () => {
 
-      await cache.addAll(
-        APP_FILES.map(path =>
-          new Request(new URL(path, BASE), {
-            cache: "reload"
-          })
-        )
-      );
+    const cache = await caches.open(CACHE_NAME);
 
-      await self.skipWaiting();
-    })()
-  );
+    await cache.addAll(APP_FILES.map(file =>
+      new Request(new URL(file, BASE), {
+        cache: "reload"
+      })
+    ));
+
+    await self.skipWaiting();
+
+  })());
 });
 
-// 古いキャッシュを削除
 self.addEventListener("activate", event => {
-  event.waitUntil(
-    (async () => {
-      const keys = await caches.keys();
+  event.waitUntil((async () => {
 
-      await Promise.all(
-        keys
-          .filter(key =>
-            key.startsWith(CACHE_PREFIX) &&
-            key !== CACHE_NAME
-          )
-          .map(key => caches.delete(key))
-      );
+    const keys = await caches.keys();
 
-      await self.clients.claim();
-    })()
-  );
+    await Promise.all(
+      keys.filter(key =>
+        key.startsWith(CACHE_PREFIX) &&
+        key !== CACHE_NAME
+      ).map(key => caches.delete(key))
+    );
+
+    await self.clients.claim();
+
+  })());
 });
 
-// 通信処理
 self.addEventListener("fetch", event => {
+
   const request = event.request;
   const url = new URL(request.url);
 
-  // 外部サイトや対象外の通信には干渉しない
-  if (
-    request.method !== "GET" ||
-    url.origin !== BASE.origin ||
-    !url.pathname.startsWith(BASE.pathname)
-  ) {
+  if (request.method !== "GET" ||
+      url.origin !== BASE.origin ||
+      (url.pathname !== BASE.pathname &&
+       !APP_PATHS.has(url.pathname))) {
     return;
   }
 
-  event.respondWith(
-    (async () => {
-      const cache = await caches.open(CACHE_NAME);
+  event.respondWith((async () => {
 
-      try {
-        // オンライン時は最新の情報を優先
-        const response = await fetch(request, {
-          cache: "no-store"
-        });
+    const cache = await caches.open(CACHE_NAME);
+    const key = cacheKey(url);
 
-        if (response.ok) {
-          try {
-            await cache.put(request, response.clone());
-          } catch (error) {
-            console.warn("キャッシュ保存失敗", error);
-          }
+    try {
+
+      const response = await fetch(request, {
+        cache: "no-store"
+      });
+
+      if (response.ok) {
+
+        try {
+          await cache.put(key, response.clone());
+        } catch (error) {
+          console.warn("キャッシュ保存失敗", error);
         }
 
         return response;
-
-      } catch (error) {
-        // 通信できない場合は保存済みデータを利用
-        const saved = await cache.match(request);
-
-        if (saved) {
-          return saved;
-        }
-
-        if (request.mode === "navigate") {
-          const fallback = await cache.match(
-            new URL("./index.html", BASE)
-          );
-
-          if (fallback) {
-            return fallback;
-          }
-        }
-
-        return new Response(
-          "インターネットに接続してください。",
-          {
-            status: 503,
-            headers: {
-              "Content-Type": "text/plain; charset=UTF-8"
-            }
-          }
-        );
       }
-    })()
-  );
+
+      if (response.status < 500) {
+        return response;
+      }
+
+      return (await cache.match(key)) || response;
+
+    } catch (error) {
+
+      const saved = await cache.match(key);
+
+      if (saved) return saved;
+
+      return new Response(
+        "インターネットに接続して、もう一度お試しください。",
+        {
+          status: 503,
+          headers: {
+            "Content-Type": "text/plain; charset=UTF-8"
+          }
+        }
+      );
+
+    }
+
+  })());
 });
