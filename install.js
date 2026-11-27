@@ -1,458 +1,137 @@
-
 (() => {
-  let installPrompt = null;
-
-  const isInstalled = () =>
-    window.matchMedia("(display-mode: standalone)").matches ||
-    navigator.standalone === true;
-
-  window.addEventListener("beforeinstallprompt", event => {
-    event.preventDefault();
-    installPrompt = event;
-    updateInstallButton();
-  });
-
-  window.addEventListener("appinstalled", () => {
-    installPrompt = null;
-    document.getElementById("install-guide")?.remove();
-  });
-
-  function updateInstallButton() {
-    const button = document.getElementById("install-direct");
-    if (button) {
-      button.hidden = !installPrompt || isInstalled();
-    }
+  'use strict';
+  const URL = 'https://zarinamo0123.github.io/kotoba/';
+  let pending = null;
+  let installed = false;
+  const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const ua = navigator.userAgent || '';
+  const apple = /iPhone|iPad|iPod/i.test(ua) || (/Mac/i.test(navigator.platform || '') && navigator.maxTouchPoints > 1);
+  const android = /Android/i.test(ua);
+  const $ = id => document.getElementById(id);
+  const icons = {
+    safari: '<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21" fill="#168eea" stroke="#fff" stroke-width="2"/><circle cx="24" cy="24" r="16" fill="none" stroke="#fff" stroke-dasharray="1 3" stroke-width="2"/><path d="M33 13 27 27 15 35 21 21Z" fill="white"/><path d="M33 13 27 27 21 21Z" fill="#e94c4c"/></svg>',
+    chrome: '<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21" fill="#e94235"/><path d="M5 15 A21 21 0 0 0 24 45 L34 27 17 27Z" fill="#34a853"/><path d="M24 45 A21 21 0 0 0 44 16 L24 16 34 27Z" fill="#fbbc05"/><circle cx="24" cy="24" r="10" fill="#4285f4" stroke="white" stroke-width="2"/></svg>',
+    share: '<svg viewBox="0 0 24 24" fill="none" stroke="#007aff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 8H5v13h14V8h-3M12 15V2M8 6l4-4 4 4"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 7v10M7 12h10"/></svg>',
+    dots: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m7 12 3 3 7-7"/></svg>'
+  };
+  function step(n, icon, title, detail) {
+    return `<li class="ig-step"><span class="ig-number" aria-hidden="true">${n}</span><span class="ig-symbol">${icons[icon]}</span><div><strong>${title}</strong><p>${detail}</p></div></li>`;
   }
-
-  function createGuide() {
-    if (isInstalled()) return;
-
-    const footer = document.querySelector("footer");
+  function trouble(title, body, group = 'both') {
+    return `<details class="ig-help" data-device="${group}"><summary>${title}</summary><div class="ig-answer">${body}</div></details>`;
+  }
+  function refresh() {
+    if (installed || standalone()) { $('install-guide')?.remove(); return; }
+    const direct = $('install-direct');
+    if (!direct) return;
+    const canPrompt = !!pending && !apple;
+    direct.hidden = !canPrompt;
+    $('install-method').classList.toggle('ig-primary-method', !canPrompt);
+    $('install-method-label').textContent = canPrompt ? 'ボタンで追加できないとき・手動での追加方法' : 'ホーム画面に追加する方法';
+  }
+  window.addEventListener('beforeinstallprompt', event => {
+    event.preventDefault(); pending = event; refresh();
+  });
+  window.addEventListener('appinstalled', () => {
+    installed = true; pending = null; refresh();
+  });
+  function build() {
+    if (installed || standalone() || $('install-guide')) return;
+    const footer = document.querySelector('footer');
     if (!footer) return;
-
-    const style = document.createElement("style");
-
+    const style = document.createElement('style');
     style.textContent = `
-      #install-guide {
-        max-width: 540px;
-        margin: 24px auto;
-        padding: 20px;
-        box-sizing: border-box;
-        background: #fffdf8;
-        border: 1px solid #ddd5c6;
-        border-radius: 12px;
-        color: #51483b;
-        text-align: left;
-        line-height: 1.8;
-        font-size: 15px;
-      }
-
-      #install-guide [hidden] {
-        display: none !important;
-      }
-
-      .install-heading {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-      }
-
-      .install-heading img {
-        width: 64px;
-        height: 64px;
-        border-radius: 14px;
-        flex-shrink: 0;
-      }
-
-      #install-guide h2 {
-        font-size: 18px;
-        margin: 0 0 4px;
-        font-weight: 700;
-      }
-
-      #install-guide p {
-        margin: 8px 0;
-        line-height: 1.8;
-      }
-
-      #install-guide button {
-        appearance: none;
-        font: inherit;
-        color: #51483b;
-        background: #fffdf8;
-        border: 1px solid #ddd5c6;
-        border-radius: 8px;
-        padding: 12px;
-        min-height: 48px;
-        cursor: pointer;
-      }
-
-      #install-guide button:focus-visible,
-      #install-guide summary:focus-visible {
-        outline: 2px solid #a45c45;
-        outline-offset: 3px;
-      }
-
-      #install-direct {
-        width: 100%;
-        margin-top: 14px;
-        background: #a45c45 !important;
-        color: white !important;
-        font-weight: 700 !important;
-      }
-
-      #install-guide details {
-        margin-top: 14px;
-      }
-
-      #install-guide summary {
-        cursor: pointer;
-        padding: 12px;
-        border: 1px solid #ddd5c6;
-        border-radius: 8px;
-        font-weight: 700;
-        text-align: center;
-      }
-
-      .install-tabs {
-        display: flex;
-        gap: 8px;
-        margin: 16px 0;
-      }
-
-      .install-tabs button {
-        flex: 1;
-      }
-
-      .install-tabs button[aria-pressed="true"] {
-        background: #f2e4d9 !important;
-        color: #a45c45 !important;
-        border-color: #a45c45 !important;
-        font-weight: 700 !important;
-      }
-
-      .install-step {
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-        padding: 16px 0;
-        border-bottom: 1px solid #eee8dc;
-      }
-
-      .install-step h3 {
-        margin: 0;
-        font-size: 16px;
-        line-height: 1.6;
-      }
-
-      .install-step p {
-        font-size: 14px;
-      }
-
-      .install-symbol {
-        width: 52px;
-        height: 52px;
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #f8f5ed;
-        border: 1px solid #ddd5c6;
-        border-radius: 10px;
-        font-size: 28px;
-      }
-
-      .install-symbol svg {
-        width: 28px;
-        height: 28px;
-      }
-
-      .install-complete {
-        text-align: center;
-        padding: 24px 0 8px;
-      }
-
-      .install-complete img {
-        width: 72px;
-        height: 72px;
-        border-radius: 16px;
-      }
-
-      .install-note {
-        font-size: 13px;
-        color: #796c5b;
-      }
-
-      @media (max-width: 700px) {
-        #install-guide {
-          margin: 20px 12px;
-          padding: 16px;
-        }
-      }
+      #install-guide{max-width:540px;margin:24px auto;padding:20px;box-sizing:border-box;background:#fffdf8;border:1px solid #ddd5c6;border-radius:12px;color:#51483b;text-align:left;font-size:16px;line-height:1.75;letter-spacing:normal;overflow-wrap:anywhere}
+      #install-guide *{box-sizing:border-box} #install-guide [hidden]{display:none!important}
+      #install-guide p{margin:6px 0;line-height:1.75} #install-guide h2{font-size:19px;margin:0 0 3px} #install-guide h3{font-size:16px;margin:18px 0 8px}
+      .ig-heading{display:flex;align-items:center;gap:14px}.ig-heading img{width:60px;height:60px;border-radius:14px;flex-shrink:0}
+      #install-guide .ig-note{font-size:14px;color:#796c5b}
+      #install-guide button,#install-guide summary{font:inherit;color:#51483b;background:#fffdf8;border:1px solid #ddd5c6;border-radius:8px;padding:12px;min-height:48px;cursor:pointer;white-space:normal}
+      #install-guide button:focus-visible,#install-guide summary:focus-visible,#install-guide input:focus-visible{outline:2px solid #a45c45;outline-offset:3px}
+      #install-direct,#install-guide .ig-primary-method>summary{background:#a45c45!important;color:#fff!important;font-weight:700!important;width:100%;text-align:center}
+      #install-direct{margin-top:12px} #install-method{margin-top:12px} #install-method>summary{font-weight:700;text-align:center}
+      .ig-tabs{display:flex;gap:8px;margin:14px 0}.ig-tabs button{flex:1;min-width:0}.ig-tabs button[aria-pressed=true]{background:#f2e4d9!important;color:#914b36!important;border-color:#a45c45!important;font-weight:700!important}
+      .ig-steps{padding:0!important;margin:0!important;list-style:none!important}.ig-step{display:grid;grid-template-columns:23px 42px minmax(0,1fr);gap:9px;align-items:start;padding:14px 0;border-bottom:1px solid #eee8dc}.ig-step strong{font-size:16px}.ig-step p{font-size:15px}.ig-number{font-weight:bold;color:#914b36}.ig-symbol{width:42px;height:42px;display:grid;place-items:center;background:#f8f5ed;border-radius:9px}.ig-symbol svg{width:31px;height:31px}
+      .ig-complete{text-align:center;padding:20px 0}.ig-complete img{width:64px;height:64px;border-radius:14px}.ig-help{margin:8px 0}.ig-help>summary{text-align:left;font-weight:500}.ig-answer{padding:10px 6px 14px;font-size:15px}.ig-copy{width:100%;margin:8px 0}.ig-url{width:100%;padding:10px;border:1px solid #ddd5c6;border-radius:6px;font-size:16px;color:#51483b;background:#fff}.ig-copy-status{font-size:14px;min-height:1.5em;color:#51483b}
+      @media(max-width:700px){#install-guide{margin:20px 12px;padding:16px}}
     `;
-
     document.head.appendChild(style);
-
-    const guide = document.createElement("section");
-    guide.id = "install-guide";
-
+    const guide = document.createElement('section');
+    guide.id = 'install-guide';
+    guide.setAttribute('aria-labelledby','install-heading');
     guide.innerHTML = `
-      <div class="install-heading">
-        <img src="icons/icon-192.png" alt="">
-        <div>
-          <h2>ことばを、もっと身近に。</h2>
-          <p>
-            ホーム画面から、いつでも
-            ことばのつながりをたどれます。
-          </p>
-        </div>
-      </div>
-
-      <p class="install-note">
-        無料・会員登録不要。
-        アプリストアを開く必要もありません。
-      </p>
-
-      <button id="install-direct" type="button" hidden>
-        ホーム画面に追加する
-      </button>
-
-      <details>
-        <summary>ホーム画面への追加方法</summary>
-
-        <p>
-          お使いのスマートフォンを選んでください。
-        </p>
-
-        <div class="install-tabs">
-          <button id="install-iphone"
-                  type="button"
-                  aria-pressed="false">
-            iPhoneの方
-          </button>
-
-          <button id="install-android"
-                  type="button"
-                  aria-pressed="false">
-            Androidの方
-          </button>
-        </div>
-
-        <div id="install-iphone-steps" hidden>
-
-          <div class="install-step">
-            <div class="install-symbol">①</div>
-            <div>
-              <h3>Safariでこのサイトを開く</h3>
-              <p>
-                Safariは、青い方位磁針の
-                マークのアプリです。
-                noteやLINEの中で開いている場合は、
-                このサイトのURLをコピーして
-                Safariで開いてください。
-              </p>
-            </div>
-          </div>
-
-          <div class="install-step">
-            <div class="install-symbol">
-              <svg viewBox="0 0 24 24"
-                   fill="none"
-                   stroke="#007aff"
-                   stroke-width="1.8"
-                   stroke-linecap="round"
-                   stroke-linejoin="round">
-                <path d="M8 8H5v13h14V8h-3"/>
-                <path d="M12 15V2"/>
-                <path d="M8 6l4-4 4 4"/>
-              </svg>
-            </div>
-            <div>
-              <h3>② 共有ボタンを押す</h3>
-              <p>
-                四角から上向きの矢印が
-                出ているマークです。
-                見当たらない場合は、
-                メニューの中を探してください。
-              </p>
-            </div>
-          </div>
-
-          <div class="install-step">
-            <div class="install-symbol">⊞</div>
-            <div>
-              <h3>③「ホーム画面に追加」を押す</h3>
-              <p>
-                見つからない場合は、
-                表示されたメニューを
-                下にスクロールしてください。
-              </p>
-            </div>
-          </div>
-
-          <div class="install-step">
-            <div class="install-symbol">④</div>
-            <div>
-              <h3>「追加」を押す</h3>
-              <p>
-                「Webアプリとして開く」
-                という設定がある場合は、
-                オンにしてください。
-                最後に「追加」を押します。
-              </p>
-            </div>
-          </div>
-
-        </div>
-
-        <div id="install-android-steps" hidden>
-
-          <div class="install-step">
-            <div class="install-symbol">①</div>
-            <div>
-              <h3>Chromeでこのサイトを開く</h3>
-              <p>
-                Chromeは、赤・黄・緑・青の
-                丸いマークのアプリです。
-                noteやLINEの中で開いている場合は、
-                このサイトのURLをコピーして
-                Chromeで開いてください。
-              </p>
-            </div>
-          </div>
-
-          <div class="install-step">
-            <div class="install-symbol">⋮</div>
-            <div>
-              <h3>② 画面右上の「︙」を押す</h3>
-              <p>
-                縦に点が3つ並んでいる
-                マークです。
-              </p>
-            </div>
-          </div>
-
-          <div class="install-step">
-            <div class="install-symbol">⊞</div>
-            <div>
-              <h3>③「ホーム画面に追加」を押す</h3>
-              <p>
-                「アプリをインストール」と
-                表示される場合もあります。
-              </p>
-            </div>
-          </div>
-
-          <div class="install-step">
-            <div class="install-symbol">④</div>
-            <div>
-              <h3>「インストール」または「追加」を押す</h3>
-              <p>
-                確認画面が表示されたら、
-                画面の案内に従ってください。
-                選べる場合は
-                「インストール」を選んでください。
-              </p>
-            </div>
-          </div>
-
-        </div>
-
-        <div class="install-complete">
-          <img src="icons/icon-192.png" alt="枝のマーク">
-          <p>ことばをたどる</p>
-          <strong>これで完了です！</strong>
-          <p>
-            次からは、ホーム画面の
-            このマークを押すだけで開けます。
-          </p>
-        </div>
-
-        <p class="install-note">
-          ※ スマートフォンの機種やバージョンにより、
-          ボタンの位置や表示される言葉が
-          異なる場合があります。
-        </p>
-
-        <p class="install-note">
-          うまく追加できない場合でも、
-          今までどおりこのサイトをご利用いただけます。
-        </p>
-
-      </details>
-    `;
-
+      <div class="ig-heading"><img src="icons/icon-192.png" alt=""><div><h2 id="install-heading">ことばを、もっと身近に。</h2><p>ホーム画面から、いつでもことばのつながりをたどれます。</p></div></div>
+      <p class="ig-note">無料・会員登録不要。アプリストアを開く必要もありません。</p>
+      <button id="install-direct" type="button" hidden>ホーム画面に追加する</button>
+      <p id="install-result" class="ig-note" role="status" hidden></p>
+      <details id="install-method"><summary id="install-method-label">ホーム画面に追加する方法</summary>
+        <p>お使いのスマートフォン・タブレットを選んでください。</p>
+        <div class="ig-tabs" role="group" aria-label="端末の種類"><button type="button" id="install-iphone" aria-pressed="false">iPhone・iPad</button><button type="button" id="install-android" aria-pressed="false">Android</button></div>
+        <div id="install-iphone-steps" hidden><ol class="ig-steps">
+          ${step(1,'safari','Safariでこのサイトを開く','青い方位磁針のマークのアプリです。すでにSafariで開いている方は次へ。')}
+          ${step(2,'share','共有ボタンを押す','四角から上向きの矢印が出たマークです。見当たらなければ「…」などのメニューから「共有」を探します。')}
+          ${step(3,'plus','「ホーム画面に追加」を押す','共有メニューを下へスクロールして探してください。')}
+          ${step(4,'check','「追加」を押す','「ウェブアプリとして開く」が表示される場合はオンにしてから追加します。')}
+        </ol></div>
+        <div id="install-android-steps" hidden><ol class="ig-steps">
+          ${step(1,'chrome','Chromeでこのサイトを開く','赤・黄・緑・青の丸いマークのアプリです。すでにChromeで開いている方は次へ。')}
+          ${step(2,'dots','「︙」を押す','アドレス欄の近くにある、縦に点が3つ並んだマークです。')}
+          ${step(3,'plus','追加・インストールの項目を押す','「ホーム画面に追加」「アプリをインストール」「インストールしてショートカットを作成」などの表示を探します。')}
+          ${step(4,'check','画面の案内に従って追加する','「インストール」が選べる場合は選び、確認画面でも追加してください。')}
+        </ol></div>
+        <div class="ig-complete"><img src="icons/icon-192.png" alt="ことばをたどるの枝のマーク"><p><strong>これで完了です！</strong></p><p>次からは、ホーム画面のこのマークを押すだけで開けます。</p></div>
+        <h3>うまくいかないときは</h3>
+        ${trouble('note・LINEなどから開いている／ブラウザで開く方法がわからない',`<p>次のボタンでサイトのURLをコピーします。</p><button type="button" id="install-copy" class="ig-copy">サイトのURLをコピーする</button><input id="install-url" class="ig-url" type="text" readonly aria-label="サイトのURL" value="${URL}"><p id="install-copy-status" class="ig-copy-status" role="status"></p><p>① ホーム画面に戻り、<span id="install-browser-name">Safari</span>を開きます。</p><p>② アドレス欄を長押しし、「ペースト」または「貼り付け」を選びます。</p><p>③「開く」「移動」などを押して、サイトを開き直します。</p>`)}
+        ${trouble('共有ボタンが見つからない','<p>Safariの画面を軽く上下に動かすか、アドレス欄を押して操作ボタンを表示します。共有マークがなければ「…」などのページメニューを開きます。iPadでは画面上部にもご注意ください。</p>','iphone')}
+        ${trouble('「ホーム画面に追加」が見つからない','<p>共有メニューを下へスクロールします。「表示を増やす」があれば押してください。「アクションを編集」があれば開いて、ホーム画面に追加の項目がないか確認してください。</p><p>それでも見つからなければ、Safariで開き直してみてください。</p>','iphone')}
+        ${trouble('追加ボタンやメニューが見つからない','<p>Chromeでこのサイトを開き直してください。すでにアプリが追加されている場合や、ブラウザが直接追加に対応していない場合にもボタンが出ないことがあります。ホーム画面やアプリ一覧も確認してください。</p>','android')}
+        ${trouble('追加したアイコンが見つからない','<p>ホーム画面を左右にめくって、枝のマークを探してください。端末によってはアプリ一覧や検索から「ことばをたどる」を探せます。見つかったアイコンから開いてください。</p>')}
+        ${trouble('パソコンで見ている／どの端末かわからない',`<p>スマートフォンでこのURLを開いてください。iPhone・iPadならSafari、その他のAndroid端末ならChromeから開くのがおすすめです。</p><p>${URL}</p><p>端末がわからなければ、両方の説明を切り替えて、画面に合うものをご確認ください。</p>`)}
+        <p class="ig-note">機種やOS、ブラウザによって、ボタンの位置や名前が異なります。追加できなくても、今までどおりこのサイトを使えます。</p>
+      </details>`;
     footer.prepend(guide);
-
-    const iphoneButton =
-      document.getElementById("install-iphone");
-
-    const androidButton =
-      document.getElementById("install-android");
-
-    function selectDevice(device) {
-      const iphone = device === "iphone";
-
-      iphoneButton.setAttribute(
-        "aria-pressed", String(iphone)
-      );
-
-      androidButton.setAttribute(
-        "aria-pressed", String(!iphone)
-      );
-
-      document.getElementById(
-        "install-iphone-steps"
-      ).hidden = !iphone;
-
-      document.getElementById(
-        "install-android-steps"
-      ).hidden = iphone;
+    function select(device) {
+      const ios = device === 'iphone';
+      $('install-iphone').setAttribute('aria-pressed', String(ios));
+      $('install-android').setAttribute('aria-pressed', String(!ios));
+      $('install-iphone-steps').hidden = !ios;
+      $('install-android-steps').hidden = ios;
+      $('install-browser-name').textContent = ios ? 'Safari' : 'Chrome';
+      guide.querySelectorAll('[data-device]').forEach(d => { d.hidden = d.dataset.device !== 'both' && d.dataset.device !== device; });
     }
-
-    iphoneButton.addEventListener("click", () => {
-      selectDevice("iphone");
+    $('install-iphone').addEventListener('click', () => select('iphone'));
+    $('install-android').addEventListener('click', () => select('android'));
+    select(android ? 'android' : 'iphone');
+    $('install-copy').addEventListener('click', async () => {
+      const status = $('install-copy-status');
+      try { await navigator.clipboard.writeText(URL); status.textContent = 'URLをコピーしました。'; }
+      catch (_) {
+        const input = $('install-url'); input.focus(); input.select(); input.setSelectionRange(0, input.value.length);
+        status.textContent = '自動でコピーできませんでした。上のURLを長押しして「コピー」を選んでください。';
+      }
     });
-
-    androidButton.addEventListener("click", () => {
-      selectDevice("android");
-    });
-
-    const isAndroid =
-      /Android/i.test(navigator.userAgent);
-
-    selectDevice(isAndroid ? "android" : "iphone");
-
-    document.getElementById("install-direct")
-      .addEventListener("click", async () => {
-        if (!installPrompt) return;
-
-        const prompt = installPrompt;
-        installPrompt = null;
-
-        try {
-          await prompt.prompt();
-          const result = await prompt.userChoice;
-
-          if (result.outcome === "accepted") {
-            guide.remove();
-          }
-        } catch (error) {
-          console.warn("追加処理:", error);
-          guide.querySelector("details").open = true;
+    $('install-direct').addEventListener('click', async () => {
+      if (!pending) { $('install-method').open = true; return; }
+      const prompt = pending; pending = null;
+      $('install-direct').disabled = true;
+      try {
+        await prompt.prompt();
+        const result = await prompt.userChoice;
+        if (result.outcome === 'accepted' && !installed) {
+          const message = $('install-result');
+          if (message) { message.hidden = false; message.textContent = '画面の案内が完了したら、ホーム画面の枝のマークを探してください。'; }
         }
-
-        updateInstallButton();
-      });
-
-    updateInstallButton();
+      } catch (_) {
+        if ($('install-method')) $('install-method').open = true;
+      } finally {
+        if ($('install-direct')) $('install-direct').disabled = false;
+        refresh();
+      }
+    });
+    refresh();
   }
-
-  if (document.readyState === "loading") {
-    document.addEventListener(
-      "DOMContentLoaded", createGuide
-    );
-  } else {
-    createGuide();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build, {once:true});
+  else build();
 })();
