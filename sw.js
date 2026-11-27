@@ -9,6 +9,7 @@ const APP_FILES = [
   "design.css",
   "script.js",
   "install.js",
+  "welcome.js",
   "works.json",
   "manifest.json",
   "icons/icon-192.png",
