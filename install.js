@@ -7,6 +7,7 @@
   const ua = navigator.userAgent || '';
   const apple = /iPhone|iPad|iPod/i.test(ua) || (/Mac/i.test(navigator.platform || '') && navigator.maxTouchPoints > 1);
   const android = /Android/i.test(ua);
+  if (!apple && !android) return;
   const $ = id => document.getElementById(id);
   const icons = {
     safari: '<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21" fill="#168eea" stroke="#fff" stroke-width="2"/><circle cx="24" cy="24" r="16" fill="none" stroke="#fff" stroke-dasharray="1 3" stroke-width="2"/><path d="M33 13 27 27 15 35 21 21Z" fill="white"/><path d="M33 13 27 27 21 21Z" fill="#e94c4c"/></svg>',
