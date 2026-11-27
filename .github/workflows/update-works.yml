@@ -1,4 +1,3 @@
-
 name: Update works
 
 on:
@@ -233,47 +232,48 @@ jobs:
                           reasons[article_id] = "記事情報不足"
                           continue
 
-                      candidates = [
+                      candidates = sorted(
                           candidate
                           for candidate in page["candidates"]
                           if candidate in registered
                           or candidate in magazine
                           or candidate in hashtag
-                      ]
+                      )
 
-                      if len(candidates) != 1:
+                      matches = []
+                      for candidate in candidates:
+                          candidate_url = (
+                              registered[candidate]["url"]
+                              if candidate in registered
+                              else magazine.get(candidate) or hashtag[candidate]
+                          )
+                          candidate_page = read_article(candidate_url)
+                          if not candidate_page["body"]:
+                              raise RuntimeError(f"候補本文取得失敗: {candidate_url}")
+                          matched = page["title"] in candidate_page["body"]
+                          print(f"照合: {candidate_page['title']} / 一致: {matched}")
+                          if matched:
+                              matches.append(candidate)
+
+                      if len(matches) != 1:
                           reasons[article_id] = (
-                              "乗っ取り元候補なし・複数"
+                              f"本文一致候補: {len(matches)}作品"
                           )
                           continue
 
-                      candidate = candidates[0]
-
+                      candidate = matches[0]
                       if candidate not in registered:
-                          reasons[article_id] = (
-                              "乗っ取り元が未登録"
-                          )
+                          reasons[article_id] = "乗っ取り元が未登録"
                           continue
 
                       parent = registered[candidate]
-
                       if parent.get("verified") is not True:
-                          reasons[article_id] = (
-                              "乗っ取り元が未確認"
-                          )
+                          reasons[article_id] = "乗っ取り元が未確認"
                           continue
 
                       parent_page = read_article(parent["url"])
-
-                      if (
-                          parent_page["profile"]
-                          == page["profile"]
-                      ):
+                      if parent_page["profile"] == page["profile"]:
                           reasons[article_id] = "自己乗っ取り"
-                          continue
-
-                      if page["title"] not in parent_page["body"]:
-                          reasons[article_id] = "本文不一致"
                           continue
 
                       if any(
