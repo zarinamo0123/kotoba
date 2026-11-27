@@ -35,7 +35,7 @@ jobs:
 
       - name: Discover and register works
         env:
-          APPLY: ${{ inputs.apply }}
+          APPLY: ${{ github.event_name == 'schedule' || inputs.apply }}
         run: |
           python <<'PY'
           import json
@@ -355,7 +355,7 @@ jobs:
           PY
 
       - name: Save changes
-        if: ${{ inputs.apply }}
+        if: ${{ github.event_name == 'schedule' || inputs.apply }}
         run: |
           if git diff --quiet -- works.json; then
             echo "No changes"
