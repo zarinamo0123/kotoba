@@ -1,1 +1,68 @@
 
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>noteリンク動作テスト</title>
+<style>
+body {
+  font-family: sans-serif;
+  background: #f8f5ed;
+  color: #51483b;
+  padding: 20px;
+  max-width: 600px;
+  margin: auto;
+}
+a {
+  display: block;
+  padding: 16px;
+  margin: 12px 0;
+  border: 1px solid #ddd5c6;
+  border-radius: 8px;
+  background: #fffdf8;
+  color: #51483b;
+  text-decoration: none;
+}
+p {
+  font-size: 14px;
+  line-height: 1.7;
+}
+</style>
+</head>
+<body>
+
+<h1>リンク動作テスト</h1>
+<p>それぞれのリンクを押して、noteアプリとブラウザのどちらが開くか確認してください。</p>
+
+<h2>プロフィール</h2>
+
+<a href="https://note.com/zarinamo">
+① 通常のリンク
+</a>
+
+<a href="https://note.com/zarinamo" target="_blank" rel="noopener noreferrer">
+② 新しいタブで開く
+</a>
+
+<a href="intent://note.com/zarinamo#Intent;scheme=https;end">
+③ Android Intent
+</a>
+
+<h2>記事（比較用）</h2>
+
+<a href="https://note.com/zarinamo/n/n8840122ca349">
+④ 通常のリンク
+</a>
+
+<a href="https://note.com/zarinamo/n/n8840122ca349" target="_blank" rel="noopener noreferrer">
+⑤ 新しいタブで開く
+</a>
+
+<a href="intent://note.com/zarinamo/n/n8840122ca349#Intent;scheme=https;end">
+⑥ Android Intent
+</a>
+
+</body>
+</html>
