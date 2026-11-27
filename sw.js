@@ -1,5 +1,5 @@
 
-const CACHE_NAME = "kotoba-v2";
+const CACHE_NAME = "kotoba-v3";
 const CACHE_PREFIX = "kotoba-";
 const BASE = new URL(self.registration.scope);
 
