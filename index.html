@@ -7,6 +7,15 @@
   <meta name="description" content="ことば乗っ取りゲームから生まれた作品のつながりをたどるサイトです。">
   <title>ことばをたどる</title>
 
+  <!-- PWA設定 -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#f8f5ed">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ことばをたどる">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+
   <link rel="stylesheet" href="style.css?v=20261126-4">
   <link rel="stylesheet" href="design.css?v=2">
 
@@ -377,6 +386,30 @@
       );
 
     });
+
+    // PWA用Service Workerの登録
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", async () => {
+        try {
+          const registration =
+            await navigator.serviceWorker.register("./sw.js", {
+              scope: "./",
+              updateViaCache: "none"
+            });
+
+          console.log(
+            "Service Worker登録成功:",
+            registration.scope
+          );
+
+        } catch (error) {
+          console.warn(
+            "Service Worker登録失敗:",
+            error
+          );
+        }
+      });
+    }
   </script>
 
 </body>
