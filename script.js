@@ -521,6 +521,18 @@ function updateModeDescription() {
 }
 
 function render() {
+  const connectionCount = works.filter(w =>
+    w.verified === true &&
+    w.parent &&
+    workMap.has(w.parent) &&
+    w.parent !== w.id
+  ).length;
+
+  const counter = document.getElementById("connection-count");
+  if (counter) {
+    counter.textContent =
+      `これまでに、ことばが${connectionCount}回つながりました。`;
+  }
   if(authorView){renderAuthorsGraph();return;}
   document.getElementById("status").textContent="";
   const svg = document.getElementById("tree");
