@@ -1434,6 +1434,72 @@ async function checkWorksRefresh(force = false) {
 }
 
 function startWorksRefresh() {
+  const header = document.querySelector("header");
+  const refreshButton = document.createElement("button");
+
+  header.style.position = "relative";
+
+  refreshButton.type = "button";
+  refreshButton.id = "manual-refresh";
+  refreshButton.title = "最新の作品情報を読み込む";
+  refreshButton.setAttribute("aria-label", refreshButton.title);
+
+  refreshButton.style.cssText = `
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    touch-action: manipulation;
+  `;
+
+  refreshButton.innerHTML = `
+    <svg width="16" height="16" viewBox="0 0 24 24"
+         fill="none" stroke="currentColor"
+         stroke-width="1.5" stroke-linecap="round"
+         stroke-linejoin="round" aria-hidden="true">
+      <path d="M20 11a8 8 0 1 0-2 6"/>
+      <path d="M20 4v7h-7"/>
+    </svg>
+  `;
+
+  header.appendChild(refreshButton);
+
+  refreshButton.addEventListener("click", async () => {
+    if (refreshBusy) return;
+
+    refreshButton.disabled = true;
+    const icon = refreshButton.querySelector("svg");
+    const reduceMotion = matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+
+    const animation = reduceMotion ? null : icon.animate(
+      [
+        { transform: "rotate(0deg)" },
+        { transform: "rotate(360deg)" }
+      ],
+      { duration: 800, iterations: Infinity }
+    );
+
+    try {
+      await Promise.all([
+        checkWorksRefresh(true),
+        new Promise(resolve => setTimeout(resolve, 600))
+      ]);
+    } finally {
+      animation?.cancel();
+      refreshButton.disabled = false;
+    }
+  });
   lastRefresh = Date.now();
   const interact = () => {
     lastInteraction = Date.now();
