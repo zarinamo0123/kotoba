@@ -1471,7 +1471,20 @@ function startWorksRefresh() {
     </svg>
   `;
 
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(
+  navigator.userAgent
+) || (
+  navigator.platform === "MacIntel" &&
+  navigator.maxTouchPoints > 1
+);
+
+const isStandalone =
+  matchMedia("(display-mode: standalone)").matches ||
+  navigator.standalone === true;
+
+if (isMobile || isStandalone) {
   header.appendChild(refreshButton);
+}
 
   refreshButton.addEventListener("click", async () => {
     if (refreshBusy) return;
